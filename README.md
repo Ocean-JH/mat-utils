@@ -1,9 +1,11 @@
 # Mat-utils
 📄 **Mat-utils** is a growing collection of small, practical Python scripts designed to assist with tasks in computational materials science and AI4S (AI for Science). This repository currently includes:
 
-**First-principles Computational Tensile Test (FPCTT) Model Generator**: Automatically creates VASP input directories for [first-principles computational tensile tests][1].
+1. **First-principles Computational Tensile Test (FPCTT) Model Generator**: Automatically creates VASP input directories for [first-principles computational tensile tests][1].
 
-**Ternary Element Substitution Tool**: Helps explore new material candidates by generating and analyzing substituted structures.
+2. **Ternary Element Substitution Tool**: Helps explore new material candidates by generating and analyzing substituted structures.
+
+3. **[USPEX](https://uspex-team.org/en) Post-Processing Scripts**: Analyze and visualize the results of crystal structure prediction from USPEX.
 
 More tools will be added over time to streamline materials design, automate repetitive tasks, and support AI-driven research.
 
