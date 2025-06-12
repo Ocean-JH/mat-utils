@@ -19,6 +19,7 @@ Author: Wang Jianghai @BUAA
 
 import os
 import re
+import linecache
 
 
 def parse_file():
