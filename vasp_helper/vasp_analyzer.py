@@ -91,7 +91,7 @@ def batch_extract_vasp_results(root_directory, output_entry="entry.pkl", output_
                 'computed_entry': computed_entry,
                 'vasprun_data': {
                     'converged': vasprun.converged,
-                    'efermi_eV': vasprun.efermi if hasattr(vasprun, 'efermi') else None,
+                    'efermi': vasprun.efermi if hasattr(vasprun, 'efermi') else None,
                 }
             }
             results.append(entry_data)
@@ -114,10 +114,10 @@ def batch_extract_vasp_results(root_directory, output_entry="entry.pkl", output_
                 'lattice_beta': float(final_structure.lattice.beta),
                 'lattice_gamma': float(final_structure.lattice.gamma),
                 'volume': float(final_structure.volume),
-                'density_g_cm3': float(final_structure.density),
+                'density': float(final_structure.density),
                 'num_atoms': len(final_structure),
                 'converged': vasprun.converged,
-                'efermi_eV': float(vasprun.efermi) if hasattr(vasprun, 'efermi') and vasprun.efermi is not None else None,
+                'efermi': float(vasprun.efermi) if hasattr(vasprun, 'efermi') and vasprun.efermi is not None else None,
             }
             results_summary.append(summary)
             
@@ -146,7 +146,7 @@ def batch_extract_vasp_results(root_directory, output_entry="entry.pkl", output_
         # Display statistics
         print("\n=== Statistics ===")
         unique_formulas = len(set(r['formula'] for r in results_summary))
-        energies = [r['final_energy_eV'] for r in results_summary]
+        energies = [r['final_energy'] for r in results_summary]
         converged_count = sum(1 for r in results_summary if r['converged'])
         
         print(f"Number of unique compositions: {unique_formulas}")
@@ -218,7 +218,7 @@ def filter_and_analyze_results(results_summary, energy_cutoff=None, space_groups
     # Filter by energy
     if energy_cutoff is not None:
         initial_count = len(filtered_results)
-        filtered_results = [r for r in filtered_results if r['energy_per_atom_eV'] <= energy_cutoff]
+        filtered_results = [r for r in filtered_results if r['energy_per_atom'] <= energy_cutoff]
         print(f"Energy filtering (<= {energy_cutoff} eV/atom): {initial_count} -> {len(filtered_results)}")
     
     # Filter by space group
@@ -235,14 +235,14 @@ def filter_and_analyze_results(results_summary, energy_cutoff=None, space_groups
             formula = result['formula']
             if formula not in formula_groups:
                 formula_groups[formula] = result
-            elif result['energy_per_atom_eV'] < formula_groups[formula]['energy_per_atom_eV']:
+            elif result['energy_per_atom'] < formula_groups[formula]['energy_per_atom']:
                 formula_groups[formula] = result
         
         lowest_energy_structures = list(formula_groups.values())
         
         print(f"\nMost stable structure for each composition ({len(lowest_energy_structures)}):")
         for structure in lowest_energy_structures:
-            print(f"  {structure['formula']}: {structure['energy_per_atom_eV']:.3f} eV/atom, "
+            print(f"  {structure['formula']}: {structure['energy_per_atom']:.3f} eV/atom, "
                   f"{structure['space_group_symbol']} (entry_id: {structure['entry_id']})")
         
         # Save filtered most stable structures
@@ -267,8 +267,8 @@ if __name__ == "__main__":
         for i, result in enumerate(summary_results):
             print(f"{i+1:2d}. Entry: {result['entry_id']:<15} "
                   f"Formula: {result['formula']:<10} "
-                  f"E={result['final_energy_eV']:8.3f} eV "
-                  f"E/atom={result['energy_per_atom_eV']:7.3f} eV/atom "
+                  f"E={result['final_energy']:8.3f} eV "
+                  f"E/atom={result['energy_per_atom']:7.3f} eV/atom "
                   f"SG={result['space_group_symbol']:<10} "
                   f"Conv={'Yes' if result['converged'] else 'No'}")
     
