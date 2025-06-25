@@ -102,6 +102,7 @@ def batch_extract_vasp_results(root_directory, output_entry="entry.pkl", output_
                 'formula': computed_entry.composition.reduced_formula,
                 'composition': computed_entry.composition.formula,
                 "uncorrected_energy": computed_entry.uncorrected_energy,
+                'uncorrected_energy_per_atom': computed_entry.uncorrected_energy / len(final_structure),
                 'correction': float(computed_entry.correction) if hasattr(computed_entry, 'correction') else 0.0,
                 'final_energy': float(computed_entry.energy),
                 'energy_per_atom': float(computed_entry.energy_per_atom),
