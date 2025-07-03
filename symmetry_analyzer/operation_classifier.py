@@ -4,25 +4,35 @@
 Author: Wang Jianghai @NTU
 Contact: jianghai001@e.ntu.edu.sg
 Date: 2025-07-01
-Description: Classify symmetry operations based on their rotation matrices and affine transformations.
+Description: Classify symmetry operations of point group based on their rotation matrices and affine transformations.
 """
 import numpy as np
-from pymatgen.symmetry.groups import PointGroup
 from scipy.spatial.transform import Rotation as R
 
 def normalize_vec(vec, tol=1e-6):
     """
-    Normalize a vector and convert it to the smallest integer direction.
-    Example: [0.577, -0.577, 0.577] -> [1, -1, 1]
+    Normalize a vector to smallest integer direction and fix sign.
+    Example: [-0.577, -0.577, 0.577] -> [1, 1, -1]
     """
     vec = np.array(vec, dtype=float)
     if np.linalg.norm(vec) < tol:
         return np.array([0, 0, 1])    # Default axis
+
     vec /= np.linalg.norm(vec)
     int_approx = np.round(vec / tol).astype(int)
     gcd = np.gcd.reduce(np.abs(int_approx))
+    if gcd != 0:
+        int_vec = int_approx // gcd
+    else:
+        int_vec = int_approx
 
-    return (int_approx // gcd) if gcd != 0 else int_approx
+    # Ensure consistent sign: first non-zero component should be positive
+    for i in range(len(int_vec)):
+        if abs(int_vec[i]) > 0:
+            if int_vec[i] < 0:
+                int_vec = -int_vec
+            break
+    return int_vec
 
 def rot_order(r_mat, max_order=6, tol=1e-6):
     """Return the minimal integer n such that mat^n = I."""
@@ -33,28 +43,55 @@ def rot_order(r_mat, max_order=6, tol=1e-6):
             return n
     return None
 
+def rot_direction(matrix, axis, tol=1e-6):
+    """
+    Use triple product to determine rotation direction.
+    For 180° rotations (C2, S2), the direction is undefined → return '' (empty).
+
+    Parameters:
+        matrix (np.ndarray): 3×3 rotation or rotoinversion matrix.
+        axis (np.ndarray): Normalized axis vector.
+        tol (float): Tolerance.
+
+    Returns:
+        str: '⁺', '⁻', or '' for undefined (e.g. C2/S2)
+    """
+    # Check if it's a 180° rotation
+    angle = np.arccos((np.trace(matrix) - 1) / 2)
+    angle_deg = np.degrees(angle) % 360
+    if np.isclose(angle_deg, 180.0, atol=1e-3):
+        return ''
+
+    # Choose a vector orthogonal to axis
+    candidates = [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]
+    for v in candidates:
+        if np.linalg.norm(np.cross(axis, v)) > tol:
+            break
+    # Project v to plane orthogonal to axis
+    v_proj = v - np.dot(v, axis) * axis
+    v_proj = normalize_vec(v_proj, tol)
+    v_rot = matrix @ v_proj
+    triple = np.dot(axis, np.cross(v_proj, v_rot))
+    return "⁺" if triple < 0 else "⁻"
+
 def classify_rotation(r_mat, tol=1e-6):
     """
     Classify a 3×3 matrix as a point group operation.
 
     Parameters:
-        r_mat (array-like): A 3x3 orthogonal matrix.
+        r_mat (array-like): A 3x3 rotation-like matrix (e.g., from symmetry operation).
         tol (float): Numerical tolerance for equality checks.
 
     Returns:
         dict: {
             'rigid_op': str                # Type of rigid operations. e.g., 'C3⁺', 'm', 'i', 'S4⁺'
-            'element': array or None,       # Rotation axis or mirror normal
+            'element': array or None,       # axis (for rotation) or normal (for mirror)
             'angle_deg': float or None,     # Rotation angle in degrees
         }
     """
     matrix = np.array(r_mat, dtype=float)
     det = np.linalg.det(matrix)
     trace = np.trace(matrix)
-
-    # Check orthogonality
-    if not np.allclose(matrix @ matrix.T, np.eye(3), atol=tol):
-        raise ValueError("Input matrix is not orthogonal.")
 
     # Identity
     if np.allclose(matrix, np.eye(3), atol=tol):
@@ -71,62 +108,104 @@ def classify_rotation(r_mat, tol=1e-6):
         if len(mirror_indices) == 1:
             mirror = np.real(eigvecs[:, mirror_indices[0]])
             mirror = normalize_vec(mirror, tol=tol)
+
+            return {
+                "rigid_op": "m",
+                "element": mirror,
+                "angle_deg": 180.0
+            }
         else:
             raise ValueError("⚠️ Mirror plane ambiguous or not found.")
 
-        return {
-            "rigid_op": "m",
-            "element": mirror,
-            "angle_deg": 180.0
-        }
 
-    # Pure rotation (det = +1)
+    # Proper rotation (det = +1)
     if np.isclose(det, 1.0, atol=tol):
-        # angle_rad = np.arccos(np.clip((tr - 1) / 2, -1, 1))
-        # angle_deg = np.rad2deg(angle_rad)
-        rot = R.from_matrix(matrix)
-        rotvec = rot.as_rotvec()
-        angle_rad = np.linalg.norm(rotvec)
-        angle_deg = np.degrees(angle_rad)
-        axis = normalize_vec(rotvec / angle_rad, tol) if angle_rad > tol else [0, 0, 1]
+        n = rot_order(matrix, max_order=6, tol=tol)
+        eigvals, eigvecs = np.linalg.eig(matrix)
+        axis_indices = np.where(np.isclose(np.real(eigvals), 1.0, atol=tol))[0]
+        if len(axis_indices) == 1:
+            axis = np.real(eigvecs[:, axis_indices[0]])
+            axis = normalize_vec(axis, tol)
+        else:
+            axis = None
 
-        # Classify based on standard rotation angles
-        angle_rounded = int(np.round(angle_deg)) % 360
-        c_op_map = {
-            60: "C6⁺", 90: "C4⁺", 120: "C3⁺", 180: "C2",
-            240: "C3⁻", 270: "C4⁻", 300: "C6⁻"
-        }
+        angle_raw = 360.0 / n if n else None
+        direction = rot_direction(matrix, axis) if axis is not None else "?"
 
-        operation = c_op_map.get(angle_rounded, f"Cn ({angle_rounded}°)")
+        if angle_raw is not None:
+            if direction == "⁻":
+                angle_deg = (360 - angle_raw) % 360
+            else:
+                angle_deg = angle_raw % 360
 
-        return {
-            "rigid_op": operation,
-            "element": axis,
-            "angle_deg": angle_rounded
-        }
+        label = f"C{n}{direction}" if n else "Cn"
 
-    # Rotation + Inversion (det = -1)
+        return {"rigid_op": label, "element": axis, "angle_deg": angle_deg}
+        #     rot = R.from_matrix(matrix)
+        #     rotvec = rot.as_rotvec()
+        #     angle_rad = np.linalg.norm(rotvec)
+        #     angle_deg = np.degrees(angle_rad)
+        #     axis = normalize_vec(rotvec / angle_rad, tol) if angle_rad > tol else [0, 0, 1]
+        #
+        #     # Classify based on standard rotation angles
+        #     angle_rounded = int(np.round(angle_deg)) % 360
+        #     c_op_map = {
+        #         60: "C6⁺", 90: "C4⁺", 120: "C3⁺", 180: "C2",
+        #         240: "C3⁻", 270: "C4⁻", 300: "C6⁻"
+        #     }
+        #
+        #     operation = c_op_map.get(angle_rounded, f"Cn ({angle_rounded}°)")
+        #
+        # return {
+        #     "rigid_op": operation,
+        #     "element": axis,
+        #     "angle_deg": angle_rounded
+        # }
+
+    # Imporper Rotation: Rotation + Inversion (det = -1)
     if np.isclose(det, -1.0, atol=tol):
-        # Flip sign to get pure rotation part
-        rot = R.from_matrix(- matrix)
-        rotvec = rot.as_rotvec()
-        angle_rad = np.linalg.norm(rotvec)
-        angle_deg = np.degrees(angle_rad)
-        axis = normalize_vec(rotvec / angle_rad, tol) if angle_rad > tol else [0, 0, 1]
+        minus_mat = -matrix
+        n = rot_order(minus_mat, max_order=6, tol=tol)
+        eigvals, eigvecs = np.linalg.eig(minus_mat)
+        axis_indices = np.where(np.isclose(np.real(eigvals), 1.0, atol=tol))[0]
+        if len(axis_indices) == 1:
+            axis = np.real(eigvecs[:, axis_indices[0]])
+            axis = normalize_vec(axis, tol)
+        else:
+            axis = None
 
-        angle_rounded = int(np.round(angle_deg)) % 360
-        s_op_map = {
-            60: "S6⁺", 90: "S4⁺", 120: "S3⁺", 180: "S2",
-            240: "S3⁻", 270: "S4⁻", 300: "S6⁻"
-        }
+        angle_raw = 360.0 / n if n else None
+        direction = rot_direction(minus_mat, axis) if axis is not None else "?"
 
-        operation = s_op_map.get(angle_rounded, f"Sn ({angle_rounded}°)")
+        if angle_raw is not None:
+            if direction == "⁻":
+                angle_deg = (360 - angle_raw) % 360
+            else:
+                angle_deg = angle_raw % 360
 
-        return {
-            "rigid_op": operation,
-            "element": axis,
-            "angle_deg": angle_rounded
-        }
+        label = f"S{n}{direction}" if n else "Sn"
+
+        return {"rigid_op": label, "element": axis, "angle_deg": angle_deg}
+        # # Flip sign to get pure rotation part
+        # rot = R.from_matrix(- matrix)
+        # rotvec = rot.as_rotvec()
+        # angle_rad = np.linalg.norm(rotvec)
+        # angle_deg = np.degrees(angle_rad)
+        # axis = normalize_vec(rotvec / angle_rad, tol) if angle_rad > tol else [0, 0, 1]
+        #
+        # angle_rounded = int(np.round(angle_deg)) % 360
+        # s_op_map = {
+        #     60: "S6⁺", 90: "S4⁺", 120: "S3⁺", 180: "S2",
+        #     240: "S3⁻", 270: "S4⁻", 300: "S6⁻"
+        # }
+        #
+        # operation = s_op_map.get(angle_rounded, f"Sn ({angle_rounded}°)")
+        #
+        # return {
+        #     "rigid_op": operation,
+        #     "element": axis,
+        #     "angle_deg": angle_rounded
+        # }
 
     return {
         "rigid_op": "Unknown",
@@ -164,7 +243,7 @@ def classify_affine_operation(affine_mat, tol=1e-6):
         raise ValueError("Affine matrix must be 3x4 or 4x4 shape.")
 
     # Classify rotation (linear) part
-    result = classify_rotation(rot, tol=tol)[0]  # Get the first interpretation
+    result = classify_rotation(rot, tol=tol)
     # result["translation"] = np.round(trans, 6)
 
     # Heuristic screw/glide detector
@@ -199,9 +278,11 @@ if __name__ == '__main__':
         "23", "m-3", "432", "-43m", "m-3m"
     ]
 
+    from pymatgen.symmetry.groups import PointGroup
+
     for pg in point_groups:
         pg_ops = PointGroup(pg)
         print(f"Point group {pg} has {len(pg_ops)} operations:")
         for op in pg_ops.symmetry_ops:
             result = classify_rotation(op.rotation_matrix)
-            print(result)
+            print(f"Rotation: {op.rotation_matrix}\n Classification: {result}")
