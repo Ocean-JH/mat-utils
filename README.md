@@ -26,8 +26,15 @@ This collection of scripts is designed to analyze and visualize results from USP
 - `uspex_poscar_splitter.py`: Splits USPEX output structures into individual POSCAR files.
 
 ### 4. VASP Helper
+This set of scripts assists with VASP (Vienna Ab initio Simulation Package) calculations, including analysis and preparation of input files.
 - `vasp_analyzer.py`: Analyzes VASP calculation results.
 - `vasp_preparer.py`: Prepares input files for VASP calculations.
+
+### 5. Symmetry Analyzer
+This tool analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
+- `unique_symmetry_finder.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
+- `point_group_analyzer.py`: Lists and analyzes symmetry operations for a specified point group.
+- `classify_operations.py`: Classifies symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
 
 ---
 More tools will be added over time to streamline materials design, automate repetitive tasks, and support AI-driven research.
