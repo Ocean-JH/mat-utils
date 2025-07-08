@@ -3,8 +3,8 @@
 """
 Author: Wang Jianghai @NTU
 Contact: jianghai001@e.ntu.edu.sg
-Date: 2025-xx-xx
-Description: [Brief description of the script's purpose]
+Date: 2025-07-08
+Description: Find unique symmetry operations from space group data.
 """
 import re
 import json
@@ -52,15 +52,16 @@ def deduplicate_operations(data, output="full"):
 
     for sg_data in data.values():
         # for op_str in sg_data.get("operations", []):
-        affine = op_str_to_affine(sg_data[0], output=output)
-        if affine is None:
-            print(f"error: Invalid operation string format in {sg_data}")
-            continue
+        for i in range(len(sg_data)):
+            affine = op_str_to_affine(sg_data[i], output=output)
+            if affine is None:
+                print(f"error: Invalid operation string format in {sg_data[i]}")
+                continue
 
-        already_seen = any(np.allclose(affine, other) for other in seen)
-        if not already_seen:
-            seen.append(affine)
-            unique_ops.append(affine)
+            already_seen = any(np.allclose(affine, other) for other in seen)
+            if not already_seen:
+                seen.append(affine)
+                unique_ops.append(affine)
 
     return unique_ops
 
@@ -74,5 +75,5 @@ if __name__ == "__main__":
 
     print("There are", len(unique_operations), "unique operations found.")
 
-    with open("pg_u_ops.json", "w") as f:
+    with open("point_group_data/pg_u_ops.json", "w") as f:
         json.dump(unique_operations, f, indent=2)
