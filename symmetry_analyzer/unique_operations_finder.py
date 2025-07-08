@@ -45,7 +45,7 @@ def op_str_to_affine(op_str, output="full"):
         raise ValueError("Invalid output type specified. Use 'rot', 'tau', or 'full'.")
 
 
-def deduplicate_operations(data, output="full"):
+def find_unique_operations(data, output="full"):
     """Deduplicate operations from space group data."""
     unique_ops = []
     seen = []
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         spacegroup_data = json.load(f)
 
     print("Find", len(spacegroup_data), "Point groups in the data.")
-    unique_operations = deduplicate_operations(spacegroup_data, output="full")
+    unique_operations = find_unique_operations(spacegroup_data, output="full")
 
     print("There are", len(unique_operations), "unique operations found.")
 
