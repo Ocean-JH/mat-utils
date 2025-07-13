@@ -33,8 +33,10 @@ This set of scripts assists with VASP (Vienna Ab initio Simulation Package) calc
 ### 5. Symmetry Analyzer
 This tool analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
 - `unique_symmetry_finder.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
+- `unique_elements_finder.py`: Identifies unique symmetry elements in point groups.
 - `point_group_analyzer.py`: Lists and analyzes symmetry operations for a specified point group.
 - `classify_operations.py`: Classifies symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
+- `symop_converter.py`: Parses symmetry operation strings and converts between human-readable notation and affine matrix representations.
 
 ---
 More tools will be added over time to streamline materials design, automate repetitive tasks, and support AI-driven research.
