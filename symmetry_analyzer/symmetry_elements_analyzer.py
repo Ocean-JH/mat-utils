@@ -21,7 +21,7 @@ def is_duplicate_vector(vec: np.ndarray, seen: List[np.ndarray], tol=1e-3) -> bo
             return True
     return False
 
-def unique_elements_finder(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray]]:
+def find_unique_elements(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray]]:
     """
     Classify unique symmetry elements and group them by type (e.g., "axis", "mirror").
 
@@ -31,7 +31,7 @@ def unique_elements_finder(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarr
     Returns:
         A dictionary mapping each element type to a list of unique normalized vectors.
     """
-    from operation_classifier import classify_rotation
+    from symmetry_operations_classifier import classify_rotation
 
     unique_elements: Dict[str, List[np.ndarray]] = defaultdict(list)
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     with open("point_group_data/pg_u_ops.json", "r") as f:
         data = np.array(json.load(f))
 
-    u_elements = unique_elements_finder(list(data))
+    u_elements = find_unique_elements(list(data))
 
     with open("point_group_data/pg_u_elements.json", "w") as f:
         json.dump(u_elements, f, indent=4)

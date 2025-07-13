@@ -84,9 +84,9 @@ def rot_direction(matrix, axis, tol=1e-6):
     triple = np.dot(axis, np.cross(v_proj, v_rot))
     return "⁺" if triple < 0 else "⁻"
 
-def classify_rotation(r_mat, tol=1e-6):
+def identify_rotation(r_mat, tol=1e-6):
     """
-    Classify a 3×3 matrix as a point group operation.
+    Identify a 3×3 matrix as a point group operation.
 
     Parameters:
         r_mat (array-like): A 3x3 rotation-like matrix (e.g., from symmetry operation).
@@ -183,7 +183,7 @@ def classify_rotation(r_mat, tol=1e-6):
         "angle_deg": None
     }
 
-def classify_affine_operation(affine_mat, tol=1e-6):
+def identify_affine_operation(affine_mat, tol=1e-6):
     """
     Classify a 3x4 or 4x4 affine symmetry operation matrix.
 
@@ -254,5 +254,5 @@ if __name__ == '__main__':
         pg_ops = PointGroup(pg)
         print(f"Point group {pg} has {len(pg_ops)} operations:")
         for op in pg_ops.symmetry_ops:
-            result = classify_rotation(op.rotation_matrix)
-            print(f"Rotation: {op.rotation_matrix}\n Classification: {result}")
+            result = identify_rotation(op.rotation_matrix)
+            print(f"Rotation: {op.rotation_matrix}\n Identification: {result}")
