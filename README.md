@@ -31,7 +31,11 @@ This set of scripts assists with VASP (Vienna Ab initio Simulation Package) calc
 - `vasp_analyzer.py`: Analyzes VASP calculation results.
 - `vasp_preparer.py`: Prepares input files for VASP calculations.
 
-### 5. Symmetry Analyzer
+### 5. Periodic Table Mapper
+This tool provides a mapping of element-wise data to their respective positions in the periodic table, enabling intuitive visualization and analysis of element-specific properties.
+- `periodic_table_mapper.py`: Visualizes element-wise data on a periodic table layout, supporting raw or normalized values from dictionaries, DataFrames, or Series.
+
+### 6. Symmetry Analyzer
 This tool analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
 - `point_group_analyzer.py`: Lists and analyzes symmetry operations for a specified point group.
 - `symmetry_operations_classifier.py`: Classifies symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
