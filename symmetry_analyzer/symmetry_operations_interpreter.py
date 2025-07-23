@@ -4,7 +4,7 @@
 Author: Wang Jianghai @NTU
 Contact: jianghai001@e.ntu.edu.sg
 Date: 2025-07-01
-Description: Classify symmetry operations of point group based on their rotation matrices and affine transformations.
+Description: Interpret the geometric meaning of symmetry operations in terms of point group operations.
 """
 import numpy as np
 from numpy.linalg import norm

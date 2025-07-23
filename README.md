@@ -38,7 +38,7 @@ This tool provides a mapping of element-wise data to their respective positions 
 ### 6. Symmetry Analyzer
 This tool analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
 - `point_group_analyzer.py`: Lists and analyzes symmetry operations for a specified point group.
-- `symmetry_operations_classifier.py`: Classifies symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
+- `symmetry_operations_interpreter.py`: Interprets the geometric meaning of symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
 - `symmetry_elements_analyzer.py`: Identifies unique symmetry elements in point groups.
 - `symmetry_operations_analyzer.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
 - `site_symmetry_analyzer.py`: Collects statistics on site symmetries of all Wyckoff positions.

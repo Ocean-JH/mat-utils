@@ -31,13 +31,13 @@ def find_unique_elements(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray
     Returns:
         A dictionary mapping each element type to a list of unique normalized vectors.
     """
-    from symmetry_operations_classifier import classify_rotation
+    from symmetry_operations_interpreter import identify_rotation
 
     unique_elements: Dict[str, List[np.ndarray]] = defaultdict(list)
 
     for symmop in symmops:
         rotation = symmop[:3, :3]
-        info = classify_rotation(rotation)
+        info = identify_rotation(rotation)
 
         direction = info.get("element")
         symm_type = info.get("rigid_op")
