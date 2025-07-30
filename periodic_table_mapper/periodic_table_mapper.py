@@ -232,5 +232,5 @@ if __name__ == "__main__":
     # Example usage
     contingency = pd.read_csv("example.csv", index_col=0)
     mapper = PeriodicTableMapper()
-    mapper.set_data(contingency, normalize=True)
-    mapper.plot(attribute='mmm', save_path=None)
+    mapper.set_data(contingency, normalize=False)
+    mapper.plot_attributes(save=True)
