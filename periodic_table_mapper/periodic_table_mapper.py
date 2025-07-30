@@ -131,7 +131,7 @@ class PeriodicTableMapper:
         self.data = df.div(df.sum(axis=1), axis=0).fillna(0) if normalize else df
         self._normalize = normalize
 
-    def plot(self, title: str = 'Periodic Table Distribution', attribute: str = None, save_path: str = None):
+    def plot(self, title: str = 'Distribution of Elements', attribute: str = None, save_path: str = None):
         """
         Plot a single attribute on the periodic table.
         """
@@ -164,7 +164,9 @@ class PeriodicTableMapper:
         valid_attrs = [a for a in attrs if a in self.data.columns]
 
         for attr in valid_attrs:
-            save_path = f"attributes/{attr}_periodic_table_distribution.png" if save else None
+            safe_attr = attr.replace('/', '_')          # symmetry symbols may contain slashes
+
+            save_path = f"attributes/{safe_attr}_element_distribution.png" if save else None
             if save:
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
             self.plot(attribute=attr, save_path=save_path)
