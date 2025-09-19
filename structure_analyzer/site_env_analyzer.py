@@ -8,7 +8,7 @@ Description: This script collects site information from a structure.
 """
 import numpy as np
 
-from pymatgen.core.structure import PeriodicSite, Structure
+from pymatgen.core.structure import Structure, Element
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from pymatgen.analysis.local_env import CrystalNN
@@ -25,6 +25,13 @@ def _format_coordination_environments(env_list, csm_cutoff=2.5, digits=6):
         env['ce_symbol']: round(float(env['ce_fraction']), digits)
         for env in env_list if env['csm'] < csm_cutoff
     }
+
+
+def is_alloy(structure: Structure):
+    """Check if a structure is an alloy (contains multiple metal elements)."""
+    metals = [el for el in structure.composition.elements if Element(el).is_metal]
+
+    return len(set(metals)) >= 2
 
 def get_site_groups(structure: Structure, sga: SpacegroupAnalyzer = None):
     """Return grouping info by symmetry equivalence."""
@@ -44,6 +51,7 @@ def get_site_groups(structure: Structure, sga: SpacegroupAnalyzer = None):
             "site_indices": indices.tolist(),
             "equi_sites": [structure.sites[i] for i in indices],
             "site_element": [sp.symbol for sp in rep_site.species.elements],
+            "site_oxi_state": [sp.oxi_state for sp in rep_site.species.elements],
             "site_occupancy": [round(rep_site.species.get_wt_fraction(el), 6) for el in rep_site.species.elements],
             "multiplicity": len(indices),
             "wyckoff_letter": sym_data.wyckoffs[rep_idx],
@@ -92,7 +100,8 @@ def main(structure: Structure):
     global_info = {
         "crystal_system": sga.get_crystal_system(),
         "space_group_number": sga.get_space_group_number(),
-        "space_group_symbol": sga.get_space_group_symbol(),
+        "is_ordered": structure.is_ordered,
+        "is_alloy": is_alloy(structure),
         "site_info": [],
     }
 
@@ -103,6 +112,7 @@ def main(structure: Structure):
 
         site_info = {
             "element": group['site_element'],
+            "oxidation_state": group['site_oxi_state'],
             'occupancy': group['site_occupancy'],
             "multiplicity": group['multiplicity'],
             "wyckoff_letter": group['wyckoff_letter'],
