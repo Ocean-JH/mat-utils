@@ -8,7 +8,7 @@ Description: This script collects site information from a structure.
 """
 import numpy as np
 
-from pymatgen.core.structure import Structure, Element
+from pymatgen.core.structure import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from pymatgen.analysis.local_env import CrystalNN
@@ -28,10 +28,9 @@ def _format_coordination_environments(env_list, csm_cutoff=2.5, digits=6):
 
 
 def is_alloy(structure: Structure):
-    """Check if a structure is an alloy (contains multiple metal elements)."""
-    metals = [el for el in structure.composition.elements if Element(el).is_metal]
-
-    return len(set(metals)) >= 2
+    """Return True if all elements in the structure are metals."""
+    metals = [el for el in structure.composition.elements if el.is_metal]
+    return all(el.is_metal for el in structure.composition.elements) and len(set(metals)) > 1
 
 def get_site_groups(structure: Structure, sga: SpacegroupAnalyzer = None):
     """Return grouping info by symmetry equivalence."""
@@ -50,9 +49,9 @@ def get_site_groups(structure: Structure, sga: SpacegroupAnalyzer = None):
             "rep_site": rep_site,
             "site_indices": indices.tolist(),
             "equi_sites": [structure.sites[i] for i in indices],
-            "site_element": [sp.symbol for sp in rep_site.species.elements],
-            "site_oxi_state": [sp.oxi_state for sp in rep_site.species.elements],
-            "site_occupancy": [round(rep_site.species.get_wt_fraction(el), 6) for el in rep_site.species.elements],
+            "site_element": [sp.symbol for sp in rep_site.species],
+            "site_oxi_state": [sp.oxi_state for sp in rep_site.species],
+            "site_occupancy": [round(rep_site.species.get_wt_fraction(el), 6) for el in rep_site.species],
             "multiplicity": len(indices),
             "wyckoff_letter": sym_data.wyckoffs[rep_idx],
             "site_symmetry": sym_data.site_symmetry_symbols[rep_idx],
