@@ -31,22 +31,29 @@ The script collection assists with VASP (Vienna Ab initio Simulation Package) ca
 - `vasp_analyzer.py`: Analyzes VASP calculation results.
 - `vasp_preparer.py`: Prepares input files for VASP calculations.
 
-### 5. Periodic Table Mapper
+### 5. Structure Analyzer
+The script collection provides a comprehensive analysis of specific crystal structures, especially on symmetry and Wyckoff sites.
+- `site_env_analyzer.py`: Analyzes the local environment of sites in a crystal structure, providing insights into coordination and symmetry.
+
+### 6. Periodic Table Mapper
 The script collection provides a mapping of element-wise data to their respective positions in the periodic table, enabling intuitive visualization and analysis of element-specific properties.
 - `periodic_table_mapper.py`: Visualizes element-wise data on a periodic table layout, supporting raw or normalized values from dictionaries, DataFrames, or Series.
 
-### 6. Symmetry Statistics
+### 7. Symmetry Statistics
 The script collection analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
 - `point_group_explorer.py`: Lists and analyzes symmetry operations for a specified point group.
 - `symmetry_elements_explorer.py`: Identifies unique symmetry elements in point groups.
 - `symmetry_operations_explorer.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
 - `site_symmetry_explorer.py`: Collects statistics on site symmetries of all Wyckoff positions.
+    <div style="border: 1px solid #ffffff; background-color: #ffecc6; padding: 10px; border-radius: 5px;">
+    ⚠️ **Warning**: There is a known issue with `site_symmetry_explorer.py` where it may not correctly identify site symmetries for certain Wyckoff positions. This issue comes from `PyXtal`'s handling of site symmetries (see issue [#309](https://github.com/MaterSim/PyXtal/issues/309)). Users are advised to verify the results manually until the issue is resolved.
+    </div>
+
+### 8. Symmetry Representations
+The script collection generates matrix representations of symmetry operations.
 - `symmetry_operations_interpreter.py`: Interprets the geometric meaning of symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
 - `symop_converter.py`: Parses symmetry operation strings and converts between human-readable notation and affine matrix representations.
-
-### 7. Structure Analyzer
-The script collection provides a comprehensive analysis of specific crystal structures, especially on symmetry and Wyckoff sites.
-- `site_env_analyzer.py`: Analyzes the local environment of sites in a crystal structure, providing insights into coordination and symmetry.
+- `generators.py`: Generates matrix representations for symmetry operation generators of space groups.
 
 ---
 More tools will be added over time to streamline materials design, automate repetitive tasks, and support AI-driven research.
