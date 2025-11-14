@@ -99,8 +99,8 @@ def visualize_wyckoffs_plotly(
     plot_unit_cell: bool = True,
     theme: str = "light",
     camera: Optional[Dict[str, Any]] = None,
-    html_out: Optional[str] = None,
-    image_out: Optional[str] = None,
+    html_out: Optional[bool] = False,
+    image_out: Optional[bool] = False,
     image_scale: int = 2,
 ):
     hall_number = get_hall_number(space_group_number)
@@ -154,96 +154,6 @@ def visualize_wyckoffs_plotly(
             showlegend=True
         ))
         category_indices["cell"].append(len(traces) - 1)
-
-    # ---------- ASU ----------
-    if plot_asu:
-        asu_vertices = rational_to_arr(
-            get_asu(space_group_number).shape_vertices(include_open_vertices=True)
-        ) @ basis.T
-        if not exact_asu:
-            hull = ConvexHull(asu_vertices)
-            i, j, k = hull.simplices[:,0], hull.simplices[:,1], hull.simplices[:,2]
-            traces.append(go.Mesh3d(
-                x=asu_vertices[:,0], y=asu_vertices[:,1], z=asu_vertices[:,2],
-                i=i, j=j, k=k,
-                name="ASU (approx)",
-                color="orange",
-                opacity=0.5,
-                flatshading=True,
-            ))
-            category_indices["asu"].append(len(traces) - 1)
-            # Optional edges overlay
-            # Build edge segments with NaN separators so Plotly won't join distinct segments
-            edge_pts_with_seps = []
-            nan = np.array([np.nan, np.nan, np.nan], dtype=float)
-            for tri in hull.simplices:
-                for a, b in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])]:
-                    p1 = asu_vertices[a]; p2 = asu_vertices[b]
-                    edge_pts_with_seps.append(p1)
-                    edge_pts_with_seps.append(p2)
-                    edge_pts_with_seps.append(nan)
-            edge_segments = np.array(edge_pts_with_seps)
-            traces.append(go.Scatter3d(
-                x=edge_segments[:,0], y=edge_segments[:,1], z=edge_segments[:,2],
-                mode="lines",
-                line=dict(color="red", width=8),
-                name="ASU edges",
-                hoverinfo="skip",
-                showlegend=False
-            ))
-            category_indices["asu"].append(len(traces) - 1)
-        else:
-            # Exact ASU faces/edges from JSON
-            with open('data/exact_asu_edges_and_faces.json') as f:
-                exact_data = json.load(f)[str(space_group_number)]
-            # Faces
-            face_points_all = []
-            tri_i = []
-            tri_j = []
-            tri_k = []
-            offset = 0
-            for face in exact_data["faces"]:
-                for poly in face:
-                    poly_arr = frac_array(poly).astype(float)
-                    poly_arr = poly_arr @ basis.T
-                    face_points_all.append(poly_arr)
-                    # Fan triangulation
-                    for t in range(1, len(poly_arr)-1):
-                        tri_i.append(offset)
-                        tri_j.append(offset + t)
-                        tri_k.append(offset + t + 1)
-                    offset += len(poly_arr)
-            if face_points_all:
-                all_pts = np.concatenate(face_points_all, axis=0)
-                traces.append(go.Mesh3d(
-                    x=all_pts[:,0], y=all_pts[:,1], z=all_pts[:,2],
-                    i=tri_i, j=tri_j, k=tri_k,
-                    name="ASU (exact)",
-                    color="orange",
-                    opacity=0.5,
-                ))
-                category_indices["asu"].append(len(traces) - 1)
-            # Edges
-            edge_pts = []
-            for edge in exact_data["edges"]:
-                for seg in edge:
-                    p1 = np.array([float(Fraction(u)) for u in seg[0]])
-                    p2 = np.array([float(Fraction(u)) for u in seg[1]])
-                    # keep raw fractional points for clean separators, transform later
-                    edge_pts.append(p1)
-                    edge_pts.append(p2)
-                    edge_pts.append(np.array([np.nan, np.nan, np.nan], dtype=float))
-            if edge_pts:
-                edge_pts = np.array(edge_pts) @ basis.T
-                traces.append(go.Scatter3d(
-                    x=edge_pts[:,0], y=edge_pts[:,1], z=edge_pts[:,2],
-                    mode="lines",
-                    line=dict(color="red", width=8),
-                    name="ASU edges",
-                    hoverinfo="skip",
-                    showlegend=False
-                ))
-                category_indices["asu"].append(len(traces) - 1)
 
     if plot_wyckoffs:
         # Palettes
@@ -349,6 +259,96 @@ def visualize_wyckoffs_plotly(
                     flatshading=True,
                 ))
                 category_indices["2D"].append(len(traces) - 1)
+
+    # ---------- ASU ----------
+    if plot_asu:
+        asu_vertices = rational_to_arr(
+            get_asu(space_group_number).shape_vertices(include_open_vertices=True)
+        ) @ basis.T
+        if not exact_asu:
+            hull = ConvexHull(asu_vertices)
+            i, j, k = hull.simplices[:,0], hull.simplices[:,1], hull.simplices[:,2]
+            traces.append(go.Mesh3d(
+                x=asu_vertices[:,0], y=asu_vertices[:,1], z=asu_vertices[:,2],
+                i=i, j=j, k=k,
+                name="ASU (approx)",
+                color="orange",
+                opacity=0.5,
+                flatshading=True,
+            ))
+            category_indices["asu"].append(len(traces) - 1)
+            # Optional edges overlay
+            # Build edge segments with NaN separators so Plotly won't join distinct segments
+            edge_pts_with_seps = []
+            nan = np.array([np.nan, np.nan, np.nan], dtype=float)
+            for tri in hull.simplices:
+                for a, b in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])]:
+                    p1 = asu_vertices[a]; p2 = asu_vertices[b]
+                    edge_pts_with_seps.append(p1)
+                    edge_pts_with_seps.append(p2)
+                    edge_pts_with_seps.append(nan)
+            edge_segments = np.array(edge_pts_with_seps)
+            traces.append(go.Scatter3d(
+                x=edge_segments[:,0], y=edge_segments[:,1], z=edge_segments[:,2],
+                mode="lines",
+                line=dict(color="red", width=6),
+                name="ASU edges",
+                hoverinfo="skip",
+                showlegend=False
+            ))
+            category_indices["asu"].append(len(traces) - 1)
+        else:
+            # Exact ASU faces/edges from JSON
+            with open('data/exact_asu_edges_and_faces.json') as f:
+                exact_data = json.load(f)[str(space_group_number)]
+            # Faces
+            face_points_all = []
+            tri_i = []
+            tri_j = []
+            tri_k = []
+            offset = 0
+            for face in exact_data["faces"]:
+                for poly in face:
+                    poly_arr = frac_array(poly).astype(float)
+                    poly_arr = poly_arr @ basis.T
+                    face_points_all.append(poly_arr)
+                    # Fan triangulation
+                    for t in range(1, len(poly_arr)-1):
+                        tri_i.append(offset)
+                        tri_j.append(offset + t)
+                        tri_k.append(offset + t + 1)
+                    offset += len(poly_arr)
+            if face_points_all:
+                all_pts = np.concatenate(face_points_all, axis=0)
+                traces.append(go.Mesh3d(
+                    x=all_pts[:,0], y=all_pts[:,1], z=all_pts[:,2],
+                    i=tri_i, j=tri_j, k=tri_k,
+                    name="ASU (exact)",
+                    color="orange",
+                    opacity=0.5,
+                ))
+                category_indices["asu"].append(len(traces) - 1)
+            # Edges
+            edge_pts = []
+            for edge in exact_data["edges"]:
+                for seg in edge:
+                    p1 = np.array([float(Fraction(u)) for u in seg[0]])
+                    p2 = np.array([float(Fraction(u)) for u in seg[1]])
+                    # keep raw fractional points for clean separators, transform later
+                    edge_pts.append(p1)
+                    edge_pts.append(p2)
+                    edge_pts.append(np.array([np.nan, np.nan, np.nan], dtype=float))
+            if edge_pts:
+                edge_pts = np.array(edge_pts) @ basis.T
+                traces.append(go.Scatter3d(
+                    x=edge_pts[:,0], y=edge_pts[:,1], z=edge_pts[:,2],
+                    mode="lines",
+                    line=dict(color="red", width=6),
+                    name="ASU edges",
+                    hoverinfo="skip",
+                    showlegend=False
+                ))
+                category_indices["asu"].append(len(traces) - 1)
 
     # ---------- Build visibility toggles ----------
     def make_visibility_mask(active_keys: List[str]) -> List[bool]:
