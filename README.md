@@ -55,5 +55,21 @@ The script collection generates matrix representations of symmetry operations.
 - `symop_converter.py`: Parses symmetry operation strings and converts between human-readable notation and affine matrix representations.
 - `generators.py`: Generates matrix representations for symmetry operation generators of space groups.
 
+**Data files** required (`symmetry_rep/data/`)
+- `char_to_vec.json`: Mapping from character notation to vector representation for symmetry operations.
+- `strings.json`: String representations of symmetry operation generators for space groups 1 to 230.
+
+### 9. ASU Visualizer
+
+ASU Visualizer is an interactive tool to visualize Wyckoff positions and the asymmetric unit (ASU) for a given space group. It renders unit-cell edges, 0D/1D/2D Wyckoff features and the ASU using Plotly.
+- `wyckoffs_plotter.py`: Main script to visualize Wyckoff positions and ASU for a specified space group.
+
+**Data files** required (`asu_visualizer/data/`)
+- `space_group_basis.npz` — precomputed lattice bases for 1..230
+- `wyckoff_map.json` — wyckoff site definitions used by the visualizer
+- `std_spg_HM_map.json` — mapping from space group number to Hall number
+
+> Acknowledgement: This module builds upon the original implementation by @rees-c, shared with permission.
+
 ---
 More tools will be added over time to streamline materials design, automate repetitive tasks, and support AI-driven research.

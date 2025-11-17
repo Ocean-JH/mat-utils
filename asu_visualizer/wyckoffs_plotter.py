@@ -5,6 +5,7 @@ Author: Wang Jianghai @NTU
 Contact: jianghai001@e.ntu.edu.sg
 Date: 2025-11-12
 Description: Visualize Wyckoff positions and ASU. See details in https://arxiv.org/abs/2505.10994.
+        Adapted from earlier version by Rees Chang (https://github.com/rees-c).
 """
 import os
 import json
