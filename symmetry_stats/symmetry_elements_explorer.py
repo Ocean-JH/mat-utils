@@ -31,7 +31,7 @@ def find_unique_elements(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray
     Returns:
         A dictionary mapping each element type to a list of unique normalized vectors.
     """
-    from symmetry_rep.symmetry_operations_interpreter import identify_rotation
+    from symmetry_rep.symop_interpreter import identify_rotation
 
     unique_elements: Dict[str, List[np.ndarray]] = defaultdict(list)
 
