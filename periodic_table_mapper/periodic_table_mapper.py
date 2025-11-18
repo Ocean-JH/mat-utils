@@ -206,11 +206,11 @@ class PeriodicTableMapper:
             # Atomic number
             ax.text(x + 0.04, y + 0.8, str(z) if z is not None else '',
                     ha='left', va='center',
-                    fontsize=6, family='Helvetica')
+                    fontsize=9, family='Helvetica')
             # Element symbol
             ax.text(x + 0.5, y + 0.5, symbol,
                     ha='center', va='center',
-                    fontsize=9, weight='bold', family='Helvetica')
+                    fontsize=15, weight='bold', family='Helvetica')
 
             # Value display
             if val is not None and not np.isnan(val) and val > 0:
