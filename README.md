@@ -45,9 +45,6 @@ The script collection analyzes the symmetry operations of crystal structures, he
 - `symmetry_elements_explorer.py`: Identifies unique symmetry elements in point groups.
 - `symmetry_operations_explorer.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
 - `site_symmetry_explorer.py`: Collects statistics on site symmetries of all Wyckoff positions.
-    <div style="border: 1px solid #ffffff; background-color: #ffecc6; padding: 10px; border-radius: 5px;">
-    ⚠️ **Warning**: There is a known issue with `site_symmetry_explorer.py` where it may not correctly identify site symmetries for certain Wyckoff positions. This issue comes from `PyXtal`'s handling of site symmetries (see issue [#309](https://github.com/MaterSim/PyXtal/issues/309)). Users are advised to verify the results manually until the issue is resolved.
-    </div>
 
 ### 8. Symmetry Representations
 The script collection generates matrix representations of symmetry operations.
