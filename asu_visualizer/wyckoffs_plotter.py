@@ -467,7 +467,7 @@ def visualize_wyckoffs_plotly(
 if __name__ == "__main__":
     # Example usage: adjust parameters below.
     visualize_wyckoffs_plotly(
-        space_group_number=191,
+        space_group_number=225,
         plot_asu=True,
         exact_asu=True,
         plot_wyckoffs=True,
@@ -475,7 +475,7 @@ if __name__ == "__main__":
         plot_unit_cell=True,
         theme="light",          # or "dark"
         camera=dict(eye=dict(x=1.8, y=1.2, z=1.3)),
-        html_out=False,
+        html_out=True,
         image_out=False,
     )
 
