@@ -56,7 +56,7 @@ class GroupRelations:
     def get_order(self, group: str) -> int:
         return int(self.orders.get(str(group), 0))
 
-    def _neighbors(self, group: str, relation_type: str, index: int = None) -> List[Tuple[str, List[int]]]:
+    def _neighbors(self, group: str, relation_type: str, index: Optional[int] = None) -> List[Tuple[str, List[int]]]:
         group = str(group)
         relation_type = relation_type.lower()
         if relation_type == "supergroup":
@@ -69,14 +69,19 @@ class GroupRelations:
         for neighbor, indices in raw.items():
             if neighbor == group:
                 continue
-            filtered = [list(indices)[0]]
+            if index is None:
+                filtered = list(indices)
+            else:
+                filtered = [idx for idx in indices if idx <= index]
+            if not filtered:
+                continue
             results.append((str(neighbor), filtered))
         return results
 
     def _traverse_direction(self,
                             root: str,
                             relation_type: str,
-                            index: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                            index: Optional[int]) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         visited: Set[str] = {root}
         edges: Dict[Tuple[str, str], Set[int]] = {}
         queue: deque[str] = deque([root])
@@ -90,10 +95,76 @@ class GroupRelations:
                     queue.append(neighbor)
         return visited, edges
 
+    def _level_map(self, nodes: Set[str]) -> Dict[str, int]:
+        unique_orders = sorted({self.get_order(n) for n in nodes}, reverse=True)
+        order_to_level = {order: idx for idx, order in enumerate(unique_orders)}
+        return {node: order_to_level[self.get_order(node)] for node in nodes}
+
+    def _has_step_path(
+        self,
+        src: str,
+        dst: str,
+        direction: int,
+        level_map: Dict[str, int],
+        adjacency: Dict[str, Set[str]],
+        exclude: Tuple[str, str],
+    ) -> bool:
+        target_level = level_map[dst]
+        queue: deque[str] = deque([src])
+        visited: Set[str] = {src}
+        while queue:
+            node = queue.popleft()
+            for neighbor in adjacency.get(node, set()):
+                if (node, neighbor) == exclude:
+                    continue
+                if level_map.get(neighbor) is None:
+                    continue
+                if level_map[neighbor] - level_map[node] != direction:
+                    continue
+                if direction > 0 and level_map[neighbor] > target_level:
+                    continue
+                if direction < 0 and level_map[neighbor] < target_level:
+                    continue
+                if neighbor == dst:
+                    return True
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        return False
+
+    def _remove_cross_layer_redundancies(
+        self,
+        nodes: Set[str],
+        edges: Dict[Tuple[str, str], Set[int]],
+    ) -> Dict[Tuple[str, str], Set[int]]:
+        if not edges:
+            return edges
+        level_map = self._level_map(nodes)
+        adjacency: Dict[str, Set[str]] = {}
+        for src, dst in edges:
+            adjacency.setdefault(src, set()).add(dst)
+
+        removable: Set[Tuple[str, str]] = set()
+        for src, dst in edges:
+            src_level = level_map.get(src)
+            dst_level = level_map.get(dst)
+            if src_level is None or dst_level is None:
+                continue
+            delta = dst_level - src_level
+            if abs(delta) <= 1:
+                continue  # same layer or adjacent layers must stay
+            direction = 1 if delta > 0 else -1
+            if self._has_step_path(src, dst, direction, level_map, adjacency, exclude=(src, dst)):
+                removable.add((src, dst))
+
+        if not removable:
+            return edges
+        return {edge: vals for edge, vals in edges.items() if edge not in removable}
+
     def traverse(self,
                  root: str,
                  relation_type: Optional[str],
-                 index: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                 index: Optional[int]) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         root = str(root)
         relation_type = (relation_type or "none").lower()
         if relation_type not in {"supergroup", "subgroup", "none"}:
@@ -108,7 +179,8 @@ class GroupRelations:
             all_nodes.update(nodes)
             for edge, values in edges.items():
                 all_edges.setdefault(edge, set()).update(values)
-        return all_nodes, all_edges
+        filtered_edges = self._remove_cross_layer_redundancies(all_nodes, all_edges)
+        return all_nodes, filtered_edges
 
 
 @dataclass
@@ -139,7 +211,7 @@ class GraphVisualizer:
     def draw(self,
              root: str,
              relation_type: Optional[str],
-             index: int,
+             index: Optional[int],
              out_path: Optional[Path],
              show: bool,
              show_edge_labels: bool = True) -> None:
@@ -207,9 +279,10 @@ class GraphVisualizer:
 
         xs = [pos[0] for pos in layout.values()]
         ys = [pos[1] for pos in layout.values()]
-        ax.set_xlim(min(xs) - 3.0, max(xs) + 3.0)
+        pad_x = self.horizontal_spacing
+        ax.set_xlim(min(xs) - pad_x, max(xs) + pad_x)
         ax.set_ylim(min(ys) - 1.5, max(ys) + 1.5)
-        fig.tight_layout()
+        fig.tight_layout(pad=0.05)
 
         if out_path:
             fig.savefig(out_path, dpi=self.dpi, bbox_inches="tight",
@@ -224,8 +297,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("group", type=str, help="Space group number (e.g., 229).")
     parser.add_argument("--relation", choices=["supergroup", "subgroup", "none"],
                         default="none", help="Relation type (draw both when 'none').")
-    parser.add_argument("--index", type=int, default=0,
-                        help="Index filter (0 keeps all indices).")
+    parser.add_argument("--index", type=int, default=None,
+                        help="Max index to display (None shows all).")
     parser.add_argument("--orders", type=Path, default=DEFAULT_ORDER_PATH,
                         help="Path to sg_to_order.json.")
     parser.add_argument("--supergroups", type=Path, default=DEFAULT_SUPER_PATH,
@@ -264,7 +337,7 @@ if __name__ == "__main__":
     visualizer.draw(
         root=62,
         relation_type="subgroup",
-        index=0,
+        index=2,
         out_path=None,
         show=True,
         show_edge_labels=True,
