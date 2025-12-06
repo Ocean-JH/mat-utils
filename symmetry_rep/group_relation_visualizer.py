@@ -154,7 +154,7 @@ class GraphVisualizer:
 
         labels = {n: f"{n}\n{self.relations.get_symbol(n)}" for n in nodes}
 
-        plt.figure(figsize=self.figsize, dpi=self.dpi)
+        fig = plt.figure(figsize=self.figsize, dpi=self.dpi)
         ax = plt.gca()
         ax.set_axis_off()
 
@@ -197,7 +197,7 @@ class GraphVisualizer:
         min_x = min(x for x, _ in layout.values()) if layout else 0.0
         for y, order in order_by_y.items():
             ax.text(
-                min_x - 2.5,
+                min_x - 8,
                 y,
                 f"order {order}",
                 fontsize=self.font_size,
@@ -209,13 +209,14 @@ class GraphVisualizer:
         ys = [pos[1] for pos in layout.values()]
         ax.set_xlim(min(xs) - 3.0, max(xs) + 3.0)
         ax.set_ylim(min(ys) - 1.5, max(ys) + 1.5)
-        plt.tight_layout()
+        fig.tight_layout()
 
         if out_path:
-            plt.savefig(out_path, dpi=self.dpi, bbox_inches="tight")
+            fig.savefig(out_path, dpi=self.dpi, bbox_inches="tight",
+                        transparent=True, pad_inches=0.05)
         if show or not out_path:
             plt.show()
-        plt.close()
+        plt.close(fig)
 
 
 def parse_args() -> argparse.Namespace:
