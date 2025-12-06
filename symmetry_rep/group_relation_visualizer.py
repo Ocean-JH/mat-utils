@@ -162,17 +162,17 @@ class GroupRelations:
         return {edge: vals for edge, vals in edges.items() if edge not in removable}
 
     def traverse(self,
-                 root: str,
+                 root: int,
                  relation_type: Optional[str],
                  index: Optional[int]) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         root = str(root)
-        relation_type = (relation_type or "none").lower()
-        if relation_type not in {"supergroup", "subgroup", "none"}:
+        relation_type = relation_type.lower()
+        if relation_type not in {"supergroup", "subgroup"}:
             raise ValueError(f"Unsupported relation type: {relation_type}")
         all_nodes: Set[str] = {root}
         all_edges: Dict[Tuple[str, str], Set[int]] = {}
         directions = (["supergroup", "subgroup"]
-                      if relation_type == "none"
+                      if relation_type is None
                       else [relation_type])
         for direction in directions:
             nodes, edges = self._traverse_direction(root, direction, index)
@@ -209,7 +209,7 @@ class GraphVisualizer:
         return layout
 
     def draw(self,
-             root: str,
+             root: int,
              relation_type: Optional[str],
              index: Optional[int],
              out_path: Optional[Path],
@@ -282,7 +282,6 @@ class GraphVisualizer:
         pad_x = self.horizontal_spacing
         ax.set_xlim(min(xs) - pad_x, max(xs) + pad_x)
         ax.set_ylim(min(ys) - 1.5, max(ys) + 1.5)
-        fig.tight_layout(pad=0.05)
 
         if out_path:
             fig.savefig(out_path, dpi=self.dpi, bbox_inches="tight",
@@ -294,11 +293,11 @@ class GraphVisualizer:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Space-group relation visualizer.")
-    parser.add_argument("group", type=str, help="Space group number (e.g., 229).")
-    parser.add_argument("--relation", choices=["supergroup", "subgroup", "none"],
-                        default="none", help="Relation type (draw both when 'none').")
+    parser.add_argument("group", type=int, help="Space group number")
+    parser.add_argument("--relation", choices=["supergroup", "subgroup", None],
+                        default=None, help="Relation type.")
     parser.add_argument("--index", type=int, default=None,
-                        help="Max index to display (None shows all).")
+                        help="Max index to display.")
     parser.add_argument("--orders", type=Path, default=DEFAULT_ORDER_PATH,
                         help="Path to sg_to_order.json.")
     parser.add_argument("--supergroups", type=Path, default=DEFAULT_SUPER_PATH,
@@ -321,7 +320,7 @@ def main() -> int:
     visualizer = GraphVisualizer(relations)
     visualizer.draw(
         root=args.group,
-        relation_type=None if args.relation == "none" else args.relation,
+        relation_type=args.relation,
         index=args.index,
         out_path=args.out,
         show=args.show,
@@ -337,7 +336,7 @@ if __name__ == "__main__":
     visualizer.draw(
         root=62,
         relation_type="subgroup",
-        index=2,
+        index=None,
         out_path=None,
         show=True,
         show_edge_labels=True,
