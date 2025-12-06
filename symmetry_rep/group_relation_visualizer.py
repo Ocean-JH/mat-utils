@@ -56,7 +56,7 @@ class GroupRelations:
     def get_order(self, group: str) -> int:
         return int(self.orders.get(str(group), 0))
 
-    def _neighbors(self, group: str, relation_type: str, index_filter: int) -> List[Tuple[str, List[int]]]:
+    def _neighbors(self, group: str, relation_type: str, index: int = None) -> List[Tuple[str, List[int]]]:
         group = str(group)
         relation_type = relation_type.lower()
         if relation_type == "supergroup":
@@ -69,25 +69,20 @@ class GroupRelations:
         for neighbor, indices in raw.items():
             if neighbor == group:
                 continue
-            if index_filter == 0:
-                filtered = list(indices)
-            elif index_filter in indices:
-                filtered = [index_filter]
-            else:
-                continue
+            filtered = [list(indices)[0]]
             results.append((str(neighbor), filtered))
         return results
 
     def _traverse_direction(self,
                             root: str,
                             relation_type: str,
-                            index_filter: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                            index: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         visited: Set[str] = {root}
         edges: Dict[Tuple[str, str], Set[int]] = {}
         queue: deque[str] = deque([root])
         while queue:
             current = queue.popleft()
-            for neighbor, indices in self._neighbors(current, relation_type, index_filter):
+            for neighbor, indices in self._neighbors(current, relation_type, index):
                 edge = (current, neighbor)
                 edges.setdefault(edge, set()).update(indices)
                 if neighbor not in visited:
@@ -98,7 +93,7 @@ class GroupRelations:
     def traverse(self,
                  root: str,
                  relation_type: Optional[str],
-                 index_filter: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                 index: int) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         root = str(root)
         relation_type = (relation_type or "none").lower()
         if relation_type not in {"supergroup", "subgroup", "none"}:
@@ -109,7 +104,7 @@ class GroupRelations:
                       if relation_type == "none"
                       else [relation_type])
         for direction in directions:
-            nodes, edges = self._traverse_direction(root, direction, index_filter)
+            nodes, edges = self._traverse_direction(root, direction, index)
             all_nodes.update(nodes)
             for edge, values in edges.items():
                 all_edges.setdefault(edge, set()).update(values)
@@ -123,6 +118,7 @@ class GraphVisualizer:
     figsize: Tuple[float, float] = (7.0, 11.0)
     node_size: int = 1500
     font_size: int = 9
+    horizontal_spacing: float = 5.0
 
     def _layout(self, nodes: Set[str]) -> Dict[str, Tuple[float, float]]:
         order_rows: Dict[int, List[str]] = {}
@@ -132,7 +128,7 @@ class GraphVisualizer:
         layout: Dict[str, Tuple[float, float]] = {}
         for row_idx, order in enumerate(sorted_orders):
             row = sorted(order_rows[order], key=lambda g: int(g))
-            spacing = 2.2
+            spacing = self.horizontal_spacing
             width = (len(row) - 1) * spacing if row else 0.0
             start_x = -0.5 * width
             y = len(sorted_orders) - 1 - row_idx
@@ -143,11 +139,11 @@ class GraphVisualizer:
     def draw(self,
              root: str,
              relation_type: Optional[str],
-             index_filter: int,
+             index: int,
              out_path: Optional[Path],
              show: bool,
              show_edge_labels: bool = True) -> None:
-        nodes, edges = self.relations.traverse(root, relation_type, index_filter)
+        nodes, edges = self.relations.traverse(root, relation_type, index)
         if not nodes:
             raise ValueError("No nodes available to draw.")
         layout = self._layout(nodes)
@@ -184,7 +180,7 @@ class GraphVisualizer:
 
         if show_edge_labels and edges:
             edge_labels = {
-                edge: ",".join(str(idx) for idx in sorted(values))
+                edge: str(min(values))
                 for edge, values in edges.items()
             }
             nx.draw_networkx_edge_labels(
@@ -252,7 +248,7 @@ def main() -> int:
     visualizer.draw(
         root=args.group,
         relation_type=None if args.relation == "none" else args.relation,
-        index_filter=args.index,
+        index=args.index,
         out_path=args.out,
         show=args.show,
         show_edge_labels=args.edge_labels,
@@ -267,7 +263,7 @@ if __name__ == "__main__":
     visualizer.draw(
         root=62,
         relation_type="subgroup",
-        index_filter=2,
+        index=0,
         out_path=None,
         show=True,
         show_edge_labels=True,
