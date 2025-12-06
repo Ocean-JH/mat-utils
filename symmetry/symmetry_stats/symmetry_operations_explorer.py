@@ -67,7 +67,7 @@ def find_unique_operations(data, output="full"):
 
 
 if __name__ == "__main__":
-    with open("point_group_data/symmops_by_pg.json") as f:
+    with open("../data/point_group_data/symmops_by_pg.json") as f:
         spacegroup_data = json.load(f)
 
     print("Find", len(spacegroup_data), "Point groups in the data.")
@@ -75,5 +75,5 @@ if __name__ == "__main__":
 
     print("There are", len(unique_operations), "unique operations found.")
 
-    with open("point_group_data/pg_u_ops.json", "w") as f:
+    with open("../data/point_group_data/pg_u_ops.json", "w") as f:
         json.dump(unique_operations, f, indent=2)

@@ -31,7 +31,7 @@ def find_unique_elements(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray
     Returns:
         A dictionary mapping each element type to a list of unique normalized vectors.
     """
-    from symmetry_rep.symop_interpreter import identify_rotation
+    from symmetry.symop_interpreter import identify_rotation
 
     unique_elements: Dict[str, List[np.ndarray]] = defaultdict(list)
 
@@ -57,12 +57,12 @@ def find_unique_elements(symmops: List[np.ndarray]) -> Dict[str, List[np.ndarray
 
 
 if __name__ == "__main__":
-    with open("point_group_data/pg_u_ops.json", "r") as f:
+    with open("../data/point_group_data/pg_u_ops.json", "r") as f:
         data = np.array(json.load(f))
 
     u_elements = find_unique_elements(list(data))
 
-    with open("point_group_data/pg_u_elements.json", "w") as f:
+    with open("../data/point_group_data/pg_u_elements.json", "w") as f:
         json.dump(u_elements, f, indent=4)
 
     print(f"Unique symmetry elements found: {len(u_elements['axis']) + len(u_elements['mirror'])}")

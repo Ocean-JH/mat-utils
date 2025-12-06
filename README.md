@@ -39,18 +39,25 @@ The script collection provides a comprehensive analysis of specific crystal stru
 The script collection provides a mapping of element-wise data to their respective positions in the periodic table, enabling intuitive visualization and analysis of element-specific properties.
 - `periodic_table_mapper.py`: Visualizes element-wise data on a periodic table layout, supporting raw or normalized values from dictionaries, DataFrames, or Series.
 
-### 7. Symmetry Statistics
+### 7. Symmetry
+The script collection offers tools for symmetry analysis.
+
+#### 7.1 Symmetry Statistics
 The script collection analyzes the symmetry operations of crystal structures, helping to identify and classify unique symmetry elements in point and space groups.
 - `point_group_explorer.py`: Lists and analyzes symmetry operations for a specified point group.
 - `symmetry_elements_explorer.py`: Identifies unique symmetry elements in point groups.
 - `symmetry_operations_explorer.py`: Identifies unique symmetry operations (rotation and translation) from point/space group data.
 - `site_symmetry_explorer.py`: Collects statistics on site symmetries of all Wyckoff positions.
 
-### 8. Symmetry Representations
+#### 7.2 Symmetry Representation
 The script collection generates matrix representations of symmetry operations.
 - `symmetry_operations_interpreter.py`: Interprets the geometric meaning of symmetry operations (rotation, mirror, screw, glide, etc.) and provides details about their symmetry elements (axes or planes).
 - `symop_converter.py`: Parses symmetry operation strings and converts between human-readable notation and affine matrix representations.
 - `generators.py`: Generates matrix representations for symmetry operation generators of space groups.
+
+#### 7.3 Group-Subgroup Relations
+The script collection analyzes group-subgroup relations among space groups.
+- `group_relation_visualizer.py`: Analyzes and visualizes group-subgroup relations among space groups.
 
 **Data files** required (`symmetry_rep/data/`)
 - `char_to_vec.json`: Mapping from character notation to vector representation for symmetry operations.
