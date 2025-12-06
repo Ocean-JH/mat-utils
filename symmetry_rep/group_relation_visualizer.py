@@ -5,7 +5,7 @@ Author: Wang Jianghai @NTU
 Contact: jianghai001@e.ntu.edu.sg
 Date: 2025-12-06
 Description:
-    Visualize space-group relations (super/sub) as high-resolution vertical graphs.
+    Visualize space-group relations (super/sub) as tree graphs.
 """
 from __future__ import annotations
 
@@ -187,26 +187,49 @@ class GroupRelations:
 class GraphVisualizer:
     relations: GroupRelations
     dpi: int = 400
-    figsize: Tuple[float, float] = (7.0, 11.0)
+    figsize: Tuple[float, float] = (12, 10)
     node_size: int = 1500
     font_size: int = 9
-    horizontal_spacing: float = 5.0
+    horizontal_spacing: float = 10.0
+    min_spacing: float = 2.5
+    max_spacing: float = 9.0
+    spacing_growth: float = 0.4
+    width_scale: float = 2.0
+    height_scale: float = 3.0
 
-    def _layout(self, nodes: Set[str]) -> Dict[str, Tuple[float, float]]:
+    def _layout(self, nodes: Set[str]) -> Tuple[Dict[str, Tuple[float, float]], int, int]:
         order_rows: Dict[int, List[str]] = {}
         for node in nodes:
             order_rows.setdefault(self.relations.get_order(node), []).append(node)
         sorted_orders = sorted(order_rows.keys(), reverse=True)
+        max_row_size = max((len(row) for row in order_rows.values()), default=1)
+        global_spacing = self.horizontal_spacing + self.spacing_growth * max(0, max_row_size - 4)
+        global_spacing = max(self.min_spacing, min(self.max_spacing, global_spacing))
         layout: Dict[str, Tuple[float, float]] = {}
         for row_idx, order in enumerate(sorted_orders):
             row = sorted(order_rows[order], key=lambda g: int(g))
-            spacing = self.horizontal_spacing
-            width = (len(row) - 1) * spacing if row else 0.0
-            start_x = -0.5 * width
+            if len(row) > 1:
+                ratio = len(row) / max_row_size
+                spacing = max(
+                    self.min_spacing,
+                    min(self.max_spacing, global_spacing * ratio),
+                )
+                width = (len(row) - 1) * spacing
+                start_x = -0.5 * width
+            else:
+                spacing = 0.0
+                start_x = 0.0
             y = len(sorted_orders) - 1 - row_idx
             for col_idx, node in enumerate(row):
-                layout[node] = (start_x + col_idx * spacing, y)
-        return layout
+                x = start_x + col_idx * spacing if len(row) > 1 else 0.0
+                layout[node] = (x, y)
+        return layout, max_row_size, len(sorted_orders)
+
+    def _compute_figsize(self, max_row_size: int, layer_count: int) -> Tuple[float, float]:
+        base_w, base_h = self.figsize
+        width = max(base_w, self.width_scale * max(1, max_row_size))
+        height = max(base_h, self.height_scale * max(1, layer_count))
+        return width, height
 
     def draw(self,
              root: int,
@@ -218,7 +241,8 @@ class GraphVisualizer:
         nodes, edges = self.relations.traverse(root, relation_type, index)
         if not nodes:
             raise ValueError("No nodes available to draw.")
-        layout = self._layout(nodes)
+        layout, max_row_size, layer_count = self._layout(nodes)
+        fig_w, fig_h = self._compute_figsize(max_row_size, layer_count)
 
         graph = nx.DiGraph()
         graph.add_nodes_from(nodes)
@@ -226,7 +250,7 @@ class GraphVisualizer:
 
         labels = {n: f"{n}\n{self.relations.get_symbol(n)}" for n in nodes}
 
-        fig = plt.figure(figsize=self.figsize, dpi=self.dpi)
+        fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi)
         ax = plt.gca()
         ax.set_axis_off()
 
@@ -279,7 +303,7 @@ class GraphVisualizer:
 
         xs = [pos[0] for pos in layout.values()]
         ys = [pos[1] for pos in layout.values()]
-        pad_x = self.horizontal_spacing
+        pad_x = max(self.min_spacing, self.horizontal_spacing)
         ax.set_xlim(min(xs) - pad_x, max(xs) + pad_x)
         ax.set_ylim(min(ys) - 1.5, max(ys) + 1.5)
 
