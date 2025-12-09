@@ -408,6 +408,8 @@ class GraphVisualizer:
         graph = nx.DiGraph()
         graph.add_nodes_from(nodes)
         visible_edges = [edge for edge, data in edges.items() if data["visible"]]
+        credible_edges = [edge for edge in visible_edges if edges[edge]["credible"]]
+        non_credible_edges = [edge for edge in visible_edges if edge not in credible_edges]
         graph.add_edges_from(visible_edges)
 
         metadata = metadata or {}
@@ -445,19 +447,29 @@ class GraphVisualizer:
             node_size=self.node_size,
         )
 
-        edge_colors = ["#2ca02c" if edges[edge]["credible"] else "#de6666" for edge in visible_edges]
-
-        if visible_edges:
+        if credible_edges:
             nx.draw_networkx_edges(
                 graph,
                 layout,
-                edgelist=visible_edges,
+                edgelist=credible_edges,
                 arrows=True,
                 arrowstyle="-|>",
                 arrowsize=14,
-                width=1.2,
+                width=1.4,
                 connectionstyle="arc3",
-                edge_color=edge_colors,
+                edge_color="#2ca02c",
+            )
+        if non_credible_edges:
+            nx.draw_networkx_edges(
+                graph,
+                layout,
+                edgelist=non_credible_edges,
+                arrows=True,
+                arrowstyle="-|>",
+                arrowsize=14,
+                width=1.0,
+                connectionstyle="arc3",
+                edge_color="#de6666",
             )
 
         nx.draw_networkx_labels(graph, layout, labels=node_labels, font_size=self.font_size)
