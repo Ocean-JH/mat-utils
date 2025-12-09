@@ -422,7 +422,7 @@ class GraphVisualizer:
             for entry in entries[:2]:
                 mp_id = entry.get("material_id", "N/A")
                 energy_above_hull = entry.get("energy_above_hull", "N/A")
-                lables.append(f"{mp_id} ({energy_above_hull})")
+                lables.append(f"{mp_id} ({energy_above_hull:.3f} eV/atom)")
 
             total = len(entries)
             if total > 2:
