@@ -335,7 +335,7 @@ class GraphVisualizer:
     relations: GroupRelations
     dpi: int = 300
     figsize: Tuple[float, float] = (12, 10)
-    node_size: int = 1200
+    node_size: int = 1600
     font_size: int = 9
     horizontal_spacing: float = 10.0
     min_spacing: float = 2.5
@@ -344,14 +344,15 @@ class GraphVisualizer:
     width_scale: float = 2.0
     height_scale: float = 3.0
 
-    def _layout(self, nodes: Set[str]) -> Tuple[Dict[str, Tuple[float, float]], int, int]:
+    def _layout(self, nodes: Set[str], spacing_scale: float = 1.0) -> Tuple[Dict[str, Tuple[float, float]], int, int]:
         order_rows: Dict[int, List[str]] = {}
         for node in nodes:
             order_rows.setdefault(self.relations.get_order(node), []).append(node)
         sorted_orders = sorted(order_rows.keys(), reverse=True)
         max_row_size = max((len(row) for row in order_rows.values()), default=1)
-        global_spacing = self.horizontal_spacing + self.spacing_growth * max(0, max_row_size - 4)
-        global_spacing = max(self.min_spacing, min(self.max_spacing, global_spacing))
+        base_spacing = self.horizontal_spacing + self.spacing_growth * max(0, max_row_size - 4)
+        scaled_spacing = base_spacing * spacing_scale
+        global_spacing = max(self.min_spacing, min(self.max_spacing, scaled_spacing))
         layout: Dict[str, Tuple[float, float]] = {}
         for row_idx, order in enumerate(sorted_orders):
             row = sorted(order_rows[order], key=lambda g: int(g))
@@ -372,11 +373,33 @@ class GraphVisualizer:
                 layout[node] = (x, y)
         return layout, max_row_size, len(sorted_orders)
 
-    def _compute_figsize(self, max_row_size: int, layer_count: int) -> Tuple[float, float]:
+    def _compute_figsize(self, max_row_size: int, layer_count: int, scale: float = 1.0) -> Tuple[float, float]:
         base_w, base_h = self.figsize
         width = max(base_w, self.width_scale * max(1, max_row_size))
         height = max(base_h, self.height_scale * max(1, layer_count))
-        return width, height
+        return width * scale, height * scale
+
+    def _adaptive_params(self, node_count: int, layer_count: int) -> Dict[str, float]:
+        node_count = max(node_count, 1)
+        layer_count = max(layer_count, 1)
+        node_scale = max(0.35, min(1.0, (22 / max(node_count, 6)) ** 0.5))
+        layer_scale = max(0.55, min(1.0, 9 / max(layer_count, 2)))
+        spacing_scale = max(0.75, min(1.25, 0.85 + 0.35 * (1 - node_scale) + 0.15 * (1 - layer_scale)))
+        fig_scale = max(0.85, min(1.45, 0.85 + 0.6 * (1 - node_scale) + 0.2 * (1 - layer_scale)))
+        node_size = self.node_size * node_scale
+        font_size = max(6, int(self.font_size * min(node_scale * 1.15, layer_scale + 0.2)))
+        edge_width = 0.8 + 0.8 * node_scale
+        return {
+            "node_size": node_size,
+            "font_size": font_size,
+            "edge_label_font_size": max(6, int(font_size * 0.9)),
+            "order_font_size": max(6, int(font_size * 0.9)),
+            "arrow_size": max(8, int(12 * (0.7 + 0.6 * node_scale))),
+            "credible_edge_width": edge_width + 0.5,
+            "edge_width": edge_width,
+            "spacing_scale": spacing_scale,
+            "fig_scale": fig_scale,
+        }
 
     def draw(self,
              root: int,
@@ -402,8 +425,10 @@ class GraphVisualizer:
             }
             if not nodes:
                 raise ValueError("Node filtering removed all nodes; provide metadata that includes the root.")
-        layout, max_row_size, layer_count = self._layout(nodes)
-        fig_w, fig_h = self._compute_figsize(max_row_size, layer_count)
+        layer_count_est = len({self.relations.get_order(n) for n in nodes}) or 1
+        adaptive = self._adaptive_params(len(nodes), layer_count_est)
+        layout, max_row_size, layer_count = self._layout(nodes, spacing_scale=adaptive["spacing_scale"])
+        fig_w, fig_h = self._compute_figsize(max_row_size, layer_count, scale=adaptive["fig_scale"])
 
         graph = nx.DiGraph()
         graph.add_nodes_from(nodes)
@@ -418,13 +443,13 @@ class GraphVisualizer:
             sym = self.relations.get_symbol(node)
             entries = metadata.get(node, [])
 
-            lables = [f"SG {node} ({sym})"]
+            lables = [f"#{node}-({sym})"]
 
             # show up to 2 entries to avoid long labels
             for entry in entries[:2]:
                 mp_id = entry.get("material_id", "N/A")
-                energy_above_hull = entry.get("energy_above_hull", "N/A")
-                lables.append(f"{mp_id} ({energy_above_hull:.3f} eV/atom)")
+                # energy_above_hull = entry.get("energy_above_hull", "N/A")
+                lables.append(f"{mp_id}")
 
             total = len(entries)
             if total > 2:
@@ -434,17 +459,32 @@ class GraphVisualizer:
 
         node_labels = {n: _label_for(n) for n in nodes}
 
+        def _node_color(node: str) -> str:
+            entries = metadata.get(node, [])
+            if not entries:
+                return "#f0f0dc"
+            if any(entry.get("experimentally_verified") for entry in entries):
+                return "#32ff65"
+            return "#f0c814"
+
+        node_colors = [_node_color(n) for n in nodes]
+
         fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi)
+
+        # fig.patch.set_alpha(0)
+        # fig.patch.set_facecolor("none")
+        # ax.set_facecolor("none")
+
         ax = plt.gca()
         ax.set_axis_off()
 
         nx.draw_networkx_nodes(
             graph,
             layout,
-            node_color="#fee9b2",
+            node_color=node_colors,
             edgecolors="#555",
             linewidths=1.0,
-            node_size=self.node_size,
+            node_size=adaptive["node_size"],
         )
 
         if credible_edges:
@@ -454,8 +494,8 @@ class GraphVisualizer:
                 edgelist=credible_edges,
                 arrows=True,
                 arrowstyle="-|>",
-                arrowsize=14,
-                width=1.4,
+                arrowsize=adaptive["arrow_size"],
+                width=adaptive["credible_edge_width"],
                 connectionstyle="arc3",
                 edge_color="#2ca02c",
             )
@@ -466,13 +506,13 @@ class GraphVisualizer:
                 edgelist=non_credible_edges,
                 arrows=True,
                 arrowstyle="-|>",
-                arrowsize=14,
-                width=1.0,
+                arrowsize=adaptive["arrow_size"],
+                width=adaptive["edge_width"],
                 connectionstyle="arc3",
                 edge_color="#de6666",
             )
 
-        nx.draw_networkx_labels(graph, layout, labels=node_labels, font_size=self.font_size)
+        nx.draw_networkx_labels(graph, layout, labels=node_labels, font_size=adaptive["font_size"])
 
         if show_index:
             edge_labels = {
@@ -485,7 +525,7 @@ class GraphVisualizer:
                     graph,
                     layout,
                     edge_labels=edge_labels,
-                    font_size=max(self.font_size - 1, 6),
+                    font_size=adaptive["edge_label_font_size"],
                     rotate=False,
                 )
 
@@ -498,7 +538,7 @@ class GraphVisualizer:
                 min_x - 8,
                 y,
                 f"order {order}",
-                fontsize=self.font_size,
+                fontsize=adaptive["order_font_size"],
                 ha="left",
                 va="center",
             )
@@ -571,6 +611,6 @@ if __name__ == "__main__":
         api_key=API_KEY,
         relation_type="subgroup",
         index=(2, None),
-        output_dir=DATA_DIR / "figures",
-        show=True,
+        output_dir=None,
+        show=True
     )
