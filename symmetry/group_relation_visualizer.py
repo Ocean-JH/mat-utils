@@ -14,7 +14,7 @@ import json
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple, Optional
+from typing import Any, Dict, List, Set, Tuple, Optional, Union
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -114,25 +114,21 @@ def load_entries(formula: str, api_key: Optional[str] = None, save_structures: b
     if path.exists():
         with path.open("r", encoding="utf-8") as fh:
             entries = json.load(fh)
-
     else:
-        query_entries(formula, api_key=api_key, save_structures=save_structures)
+        entries = query_entries(formula, api_key=api_key, save_structures=save_structures)
 
     return entries
 
 def create_metadata(entries: List[Dict]) -> Dict[str, Any]:
     """Build metadata dictionary from entries."""
-    tree_metadata: Dict[str, List[Dict[str, Any]]] = {}
-    space_groups: Set[str] = set()
+    metadata: Dict[str, List[Dict[str, Any]]] = {}
 
     for entry in entries:
         sg = entry["spacegroup"].get("number")
+        sg_key = str(int(sg))
 
         if sg is None:
             continue
-
-        sg_key = str(int(sg))
-        space_groups.add(sg_key)
 
         meta = {
             "material_id": entry.get("material_id"),
@@ -144,9 +140,9 @@ def create_metadata(entries: List[Dict]) -> Dict[str, Any]:
             "database_IDs": entry.get("database_IDs")
         }
 
-        tree_metadata.setdefault(sg_key, []).append(meta)
+        metadata.setdefault(sg_key, []).append(meta)
 
-    for entries in tree_metadata.values():
+    for entries in metadata.values():
         entries.sort(
             key=lambda m: (
                 m["energy_above_hull"] is None,
@@ -154,7 +150,7 @@ def create_metadata(entries: List[Dict]) -> Dict[str, Any]:
             )
         )
 
-    return tree_metadata
+    return metadata
 
 
 @dataclass
@@ -185,7 +181,7 @@ class GroupRelations:
                    group: str,
                    relation_type: str,
                    index_bounds: Optional[Tuple[Optional[int], Optional[int]]] = None
-                   ) -> List[Tuple[str, List[int]], List[int]]:
+                   ) -> List[Tuple[str, List[int], List[int]]]:
         group = str(group)
         relation_type = relation_type.lower()
         if relation_type == "supergroup":
@@ -195,35 +191,42 @@ class GroupRelations:
         else:
             raise ValueError(f"Relation type must be 'supergroup' or 'subgroup', got: {relation_type}")
 
-        credible_index, visible_index = (index_bounds if index_bounds is not None else (2, None))
-
-        results: List[Tuple[str, List[int]], List[int]] = []
+        if index_bounds is None:
+            credible_index, visible_index = 2, None
+        else:
+            credible_index, visible_index = index_bounds
+        results: List[Tuple[str, List[int], List[int]]] = []
         for neighbor, indices in raw.items():
             if neighbor == group:
                 continue
-            cred_idx = [idx for idx in indices
-                        if (credible_index is None or idx <= credible_index)]
-            vis_idx = [idx for idx in indices
-                       if (visible_index is None or idx <= visible_index)]
+            cred_idx = [
+                idx for idx in indices
+                if credible_index is None or idx < credible_index
+            ]
+            vis_idx = [
+                idx for idx in indices
+                if visible_index is None or idx < visible_index
+            ]
             if not cred_idx and not vis_idx:
                 continue
             results.append((str(neighbor), cred_idx, vis_idx))
-
         return results
 
     def _traverse_direction(self,
                             root: str,
                             relation_type: str,
                             index_bounds: Optional[Tuple[Optional[int], Optional[int]]] = None
-                            ) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                            ) -> Tuple[Set[str], Dict[Tuple[str, str], Dict[str, Set[int]]]]:
         visited: Set[str] = {root}
-        edges: Dict[Tuple[str, str], Set[int]] = {}
+        edges: Dict[Tuple[str, str], Dict[str, Set[int]]] = {}
         queue: deque[str] = deque([root])
         while queue:
             current = queue.popleft()
-            for neighbor, indices in self._neighbors(current, relation_type, index_bounds):
+            for neighbor, cred_idx, vis_idx in self._neighbors(current, relation_type, index_bounds):
                 edge = (current, neighbor)
-                edges.setdefault(edge, set()).update(indices)
+                data = edges.setdefault(edge, {"credible": set(), "visible": set()})
+                data["credible"].update(cred_idx)
+                data["visible"].update(vis_idx)
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append(neighbor)
@@ -269,8 +272,8 @@ class GroupRelations:
     def _remove_cross_layer_redundancies(
         self,
         nodes: Set[str],
-        edges: Dict[Tuple[str, str], Set[int]],
-    ) -> Dict[Tuple[str, str], Set[int]]:
+        edges: Dict[Tuple[str, str], Dict[str, Set[int]]],
+    ) -> Dict[Tuple[str, str], Dict[str, Set[int]]]:
         if not edges:
             return edges
         level_map = self._level_map(nodes)
@@ -298,21 +301,31 @@ class GroupRelations:
     def traverse(self,
                  root: int,
                  relation_type: Optional[str],
-                 index: Optional[int]) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                 index: Optional[Union[int, Tuple[Optional[int], Optional[int]]]]) -> Tuple[Set[str], Dict[Tuple[str, str], Dict[str, Set[int]]]]:
         root = str(root)
         relation_type = relation_type.lower()
         if relation_type not in {"supergroup", "subgroup"}:
             raise ValueError(f"Unsupported relation type: {relation_type}")
+        if index is None:
+            index_bounds = None
+        elif isinstance(index, tuple):
+            if len(index) != 2:
+                raise ValueError("index must be a 2-tuple: (credible_index, visible_index)")
+            index_bounds = index
+        else:
+            index_bounds = (index, index)
         all_nodes: Set[str] = {root}
-        all_edges: Dict[Tuple[str, str], Set[int]] = {}
+        all_edges: Dict[Tuple[str, str], Dict[str, Set[int]]] = {}
         directions = (["supergroup", "subgroup"]
                       if relation_type is None
                       else [relation_type])
         for direction in directions:
-            nodes, edges = self._traverse_direction(root, direction, index)
+            nodes, edges = self._traverse_direction(root, direction, index_bounds)
             all_nodes.update(nodes)
             for edge, values in edges.items():
-                all_edges.setdefault(edge, set()).update(values)
+                target = all_edges.setdefault(edge, {"credible": set(), "visible": set()})
+                target["credible"].update(values.get("credible", set()))
+                target["visible"].update(values.get("visible", set()))
         filtered_edges = self._remove_cross_layer_redundancies(all_nodes, all_edges)
         return all_nodes, filtered_edges
 
@@ -368,21 +381,56 @@ class GraphVisualizer:
     def draw(self,
              root: int,
              relation_type: Optional[str],
-             index: Optional[int],
+             index: Optional[Union[int, Tuple[Optional[int], Optional[int]]]],
              out_path: Optional[Path],
              show: bool,
-             show_edge_labels: bool = True) -> None:
+             show_index: bool = True,
+             metadata: Optional[Dict[str, Any]] = None,
+             node_filter: bool = True) -> None:
         nodes, edges = self.relations.traverse(root, relation_type, index)
         if not nodes:
             raise ValueError("No nodes available to draw.")
+
+        metadata = metadata or {}
+        if node_filter and metadata:
+            nodes_with_data = set(metadata.keys())
+            nodes = {n for n in nodes if n in nodes_with_data}
+            edges = {
+                edge: vals
+                for edge, vals in edges.items()
+                if edge[0] in nodes and edge[1] in nodes
+            }
+            if not nodes:
+                raise ValueError("Node filtering removed all nodes; provide metadata that includes the root.")
         layout, max_row_size, layer_count = self._layout(nodes)
         fig_w, fig_h = self._compute_figsize(max_row_size, layer_count)
 
         graph = nx.DiGraph()
         graph.add_nodes_from(nodes)
-        graph.add_edges_from(edges.keys())
+        visible_edges = [edge for edge, data in edges.items() if data["visible"]]
+        graph.add_edges_from(visible_edges)
 
-        labels = {n: f"{n}\n{self.relations.get_symbol(n)}" for n in nodes}
+        metadata = metadata or {}
+
+        def _label_for(node: str) -> str:
+            sym = self.relations.get_symbol(node)
+            entries = metadata.get(node, [])
+
+            lables = [f"SG {node} ({sym})"]
+
+            # show up to 2 entries to avoid long labels
+            for entry in entries[:2]:
+                mp_id = entry.get("material_id", "N/A")
+                energy_above_hull = entry.get("energy_above_hull", "N/A")
+                lables.append(f"{mp_id} ({energy_above_hull})")
+
+            total = len(entries)
+            if total > 2:
+                lables.append(f"...(total={total})")
+
+            return "\n".join(lables)
+
+        node_labels = {n: _label_for(n) for n in nodes}
 
         fig = plt.figure(figsize=(fig_w, fig_h), dpi=self.dpi)
         ax = plt.gca()
@@ -393,33 +441,41 @@ class GraphVisualizer:
             layout,
             node_color="#fee9b2",
             edgecolors="#555",
-            linewidths=0.8,
+            linewidths=1.0,
             node_size=self.node_size,
         )
-        nx.draw_networkx_edges(
-            graph,
-            layout,
-            arrows=True,
-            arrowstyle="-|>",
-            arrowsize=14,
-            width=1.2,
-            connectionstyle="arc3",
-            edge_color="#666",
-        )
-        nx.draw_networkx_labels(graph, layout, labels=labels, font_size=self.font_size)
 
-        if show_edge_labels and edges:
-            edge_labels = {
-                edge: str(min(values))
-                for edge, values in edges.items()
-            }
-            nx.draw_networkx_edge_labels(
+        edge_colors = ["#2ca02c" if edges[edge]["credible"] else "#de6666" for edge in visible_edges]
+
+        if visible_edges:
+            nx.draw_networkx_edges(
                 graph,
                 layout,
-                edge_labels=edge_labels,
-                font_size=max(self.font_size - 1, 6),
-                rotate=False,
+                edgelist=visible_edges,
+                arrows=True,
+                arrowstyle="-|>",
+                arrowsize=14,
+                width=1.2,
+                connectionstyle="arc3",
+                edge_color=edge_colors,
             )
+
+        nx.draw_networkx_labels(graph, layout, labels=node_labels, font_size=self.font_size)
+
+        if show_index:
+            edge_labels = {
+                edge: str(min(data["visible"]))
+                for edge, data in edges.items()
+                if data["visible"]
+            }
+            if edge_labels:
+                nx.draw_networkx_edge_labels(
+                    graph,
+                    layout,
+                    edge_labels=edge_labels,
+                    font_size=max(self.font_size - 1, 6),
+                    rotate=False,
+                )
 
         order_by_y: Dict[float, int] = {}
         for node, (_, y) in layout.items():
@@ -449,18 +505,60 @@ class GraphVisualizer:
         plt.close(fig)
 
 
-if __name__ == "__main__":
-    API_KEY = "TY4CfoGAcNxKcd0Di0AiErwrrLZVVhsz"
+def main(
+        formula: str,
+        *,
+        api_key: Optional[str] = None,
+        relation_type: Optional[str] = "subgroup",
+        index: Optional[Union[int, Tuple[Optional[int], Optional[int]]]] = None,
+        output_dir: Optional[Union[str, Path]] = None,
+        show: bool = True,
+        show_index: bool = True,
+        node_filter: bool = True,
+) -> Optional[Path]:
+    resolved_key = api_key or os.environ.get("MP_API_KEY")
+    entries = load_entries(formula, api_key=resolved_key)
+    metadata = create_metadata(entries)
 
-    load_entries("CaTiO3", API_KEY)
-    # raise SystemExit(main())
-    # relations = GroupRelations.from_files()
-    # visualizer = GraphVisualizer(relations)
-    # visualizer.draw(
-    #     root=62,
-    #     relation_type="subgroup",
-    #     index=None,
-    #     out_path=None,
-    #     show=True,
-    #     show_edge_labels=True,
-    # )
+    relation_mode = relation_type.lower() if relation_type else None
+    if relation_mode not in {"supergroup", "subgroup"}:
+        raise ValueError("relation_type must be 'supergroup', or 'subgroup'.")
+
+    if relation_type == "subgroup":
+        root = max(set(metadata.keys()), key=lambda g: int(g))
+    else:
+        root = min(set(metadata.keys()), key=lambda g: int(g))
+
+    relations = GroupRelations.from_files()
+    visualizer = GraphVisualizer(relations)
+
+    out_path: Optional[Path] = None
+    if output_dir:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        relation_tag = (relation_type or "full").lower()
+        out_path = output_dir / f"{normalize_formula(formula)}-{relation_tag}-tree.png"
+
+    visualizer.draw(
+        root=int(root),
+        relation_type=relation_mode,
+        index=index,
+        out_path=out_path,
+        show=show,
+        show_index=show_index,
+        metadata=metadata,
+        node_filter=node_filter,
+    )
+
+
+if __name__ == "__main__":
+    API_KEY = "YOUR_MATERIALS_PROJECT_API_KEY"
+    formula = "CaTiO3"
+    main(
+        formula,
+        api_key=API_KEY,
+        relation_type="subgroup",
+        index=(2, None),
+        output_dir=DATA_DIR / "figures",
+        show=True,
+    )
