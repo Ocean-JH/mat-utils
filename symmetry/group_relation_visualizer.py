@@ -9,15 +9,18 @@ Description:
 """
 from __future__ import annotations
 
-import argparse
+import os
 import json
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Any, Dict, List, Set, Tuple, Optional
 
 import matplotlib.pyplot as plt
 import networkx as nx
+
+from pymatgen.core.composition import Composition
+from mp_api.client import MPRester
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DEFAULT_ORDER_PATH = DATA_DIR / "sg_to_order.json"
@@ -25,11 +28,133 @@ DEFAULT_SUPER_PATH = DATA_DIR / "supergroup.json"
 DEFAULT_SUB_PATH = DATA_DIR / "subgroup.json"
 
 
-def load_json(path: Path) -> Dict:
+def load_database(path: Path) -> Dict:
     if not path.exists():
-        raise FileNotFoundError(f"Cannot find required data file: {path}")
+        raise FileNotFoundError(f"Database file not found: {path}")
     with path.open("r", encoding="utf-8") as fh:
         return json.load(fh)
+
+def normalize_formula(formula: str) -> str:
+    """Normalize a chemical formula to a reduced form for comparison."""
+    try:
+        comp = Composition(formula)
+        return comp.reduced_formula
+    except Exception:
+        return formula.replace(" ", "")
+
+def query_entries(
+        formula: str,
+        api_key: Optional[str] = None,
+        save_structures: bool = False
+):
+    path = Path(DATA_DIR / f"mp-{formula}.json")
+    api_key = api_key or os.environ.get("MP_API_KEY")
+
+    if not api_key:
+        raise ValueError("API key is required to fetch data from Materials Project.")
+
+    fields = [
+        "material_id",
+        "formula_pretty",
+        "symmetry",
+        "energy_above_hull",
+        "formation_energy_per_atom",
+        "is_stable",
+        "theoretical",
+        "database_IDs",
+    ]
+
+    if save_structures:
+        fields.append("structure")
+
+    with MPRester(api_key) as mpr:
+        print(mpr.materials.summary.available_fields)
+        docs = mpr.materials.summary.search(
+            formula=formula,
+            fields=fields,
+        )
+
+    if docs:
+        entries: List[Dict[str, Any]] = []
+        for doc in docs:
+            entry = {
+                "material_id": doc.material_id,
+                "formula": doc.formula_pretty,
+                "spacegroup": {
+                    "number": doc.symmetry.number,
+                    "symbol": doc.symmetry.symbol,
+                    "point_group": doc.symmetry.point_group,
+                },
+                "formation_energy_per_atom": doc.formation_energy_per_atom,
+                "energy_above_hull": doc.energy_above_hull,
+                "is_stable": doc.is_stable,
+                "experimentally_verified": (not doc.theoretical) and bool(doc.database_IDs),
+                "database_IDs": doc.database_IDs
+            }
+            entries.append(entry)
+
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(entries, fh, indent=2)
+    else:
+        raise ValueError(f"No entries found for formula: {formula}")
+
+    if save_structures:
+        struct_path = DATA_DIR / f"mp-{formula}-structures"
+        struct_path.mkdir(exist_ok=True)
+        for doc in docs:
+            struct_file = struct_path / f"{doc.material_id}.cif"
+            with struct_file.open("w", encoding="utf-8") as sfh:
+                sfh.write(doc.structure.to(fmt="cif"))
+
+    return entries
+
+def load_entries(formula: str, api_key: Optional[str] = None, save_structures: bool = False) -> List[Dict[str, Any]]:
+    path = Path(DATA_DIR / f"mp-{formula}.json")
+
+    if path.exists():
+        with path.open("r", encoding="utf-8") as fh:
+            entries = json.load(fh)
+
+    else:
+        query_entries(formula, api_key=api_key, save_structures=save_structures)
+
+    return entries
+
+def create_metadata(entries: List[Dict]) -> Dict[str, Any]:
+    """Build metadata dictionary from entries."""
+    tree_metadata: Dict[str, List[Dict[str, Any]]] = {}
+    space_groups: Set[str] = set()
+
+    for entry in entries:
+        sg = entry["spacegroup"].get("number")
+
+        if sg is None:
+            continue
+
+        sg_key = str(int(sg))
+        space_groups.add(sg_key)
+
+        meta = {
+            "material_id": entry.get("material_id"),
+            "formula": entry.get("formula"),
+            "formation_energy_per_atom": entry.get("formation_energy_per_atom"),
+            "energy_above_hull": entry.get("energy_above_hull"),
+            "is_stable": entry.get("is_stable"),
+            "experimentally_verified": entry.get("experimentally_verified"),
+            "database_IDs": entry.get("database_IDs")
+        }
+
+        tree_metadata.setdefault(sg_key, []).append(meta)
+
+    for entries in tree_metadata.values():
+        entries.sort(
+            key=lambda m: (
+                m["energy_above_hull"] is None,
+                m["energy_above_hull"] if m["energy_above_hull"] is not None else float("inf")
+            )
+        )
+
+    return tree_metadata
 
 
 @dataclass
@@ -44,9 +169,9 @@ class GroupRelations:
                    super_path: Path = DEFAULT_SUPER_PATH,
                    sub_path: Path = DEFAULT_SUB_PATH) -> "GroupRelations":
         return cls(
-            orders=load_json(order_path),
-            super_rel=load_json(super_path),
-            sub_rel=load_json(sub_path),
+            orders=load_database(order_path),
+            super_rel=load_database(super_path),
+            sub_rel=load_database(sub_path),
         )
 
     def get_symbol(self, group: str) -> str:
@@ -56,7 +181,11 @@ class GroupRelations:
     def get_order(self, group: str) -> int:
         return int(self.orders.get(str(group), 0))
 
-    def _neighbors(self, group: str, relation_type: str, index: Optional[int] = None) -> List[Tuple[str, List[int]]]:
+    def _neighbors(self,
+                   group: str,
+                   relation_type: str,
+                   index_bounds: Optional[Tuple[Optional[int], Optional[int]]] = None
+                   ) -> List[Tuple[str, List[int]], List[int]]:
         group = str(group)
         relation_type = relation_type.lower()
         if relation_type == "supergroup":
@@ -64,30 +193,35 @@ class GroupRelations:
         elif relation_type == "subgroup":
             raw = self.sub_rel.get(group, {})
         else:
-            return []
-        results: List[Tuple[str, List[int]]] = []
+            raise ValueError(f"Relation type must be 'supergroup' or 'subgroup', got: {relation_type}")
+
+        credible_index, visible_index = (index_bounds if index_bounds is not None else (2, None))
+
+        results: List[Tuple[str, List[int]], List[int]] = []
         for neighbor, indices in raw.items():
             if neighbor == group:
                 continue
-            if index is None:
-                filtered = list(indices)
-            else:
-                filtered = [idx for idx in indices if idx <= index]
-            if not filtered:
+            cred_idx = [idx for idx in indices
+                        if (credible_index is None or idx <= credible_index)]
+            vis_idx = [idx for idx in indices
+                       if (visible_index is None or idx <= visible_index)]
+            if not cred_idx and not vis_idx:
                 continue
-            results.append((str(neighbor), filtered))
+            results.append((str(neighbor), cred_idx, vis_idx))
+
         return results
 
     def _traverse_direction(self,
                             root: str,
                             relation_type: str,
-                            index: Optional[int]) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
+                            index_bounds: Optional[Tuple[Optional[int], Optional[int]]] = None
+                            ) -> Tuple[Set[str], Dict[Tuple[str, str], Set[int]]]:
         visited: Set[str] = {root}
         edges: Dict[Tuple[str, str], Set[int]] = {}
         queue: deque[str] = deque([root])
         while queue:
             current = queue.popleft()
-            for neighbor, indices in self._neighbors(current, relation_type, index):
+            for neighbor, indices in self._neighbors(current, relation_type, index_bounds):
                 edge = (current, neighbor)
                 edges.setdefault(edge, set()).update(indices)
                 if neighbor not in visited:
@@ -186,9 +320,9 @@ class GroupRelations:
 @dataclass
 class GraphVisualizer:
     relations: GroupRelations
-    dpi: int = 400
+    dpi: int = 300
     figsize: Tuple[float, float] = (12, 10)
-    node_size: int = 1500
+    node_size: int = 1200
     font_size: int = 9
     horizontal_spacing: float = 10.0
     min_spacing: float = 2.5
@@ -315,53 +449,18 @@ class GraphVisualizer:
         plt.close(fig)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Space-group relation visualizer.")
-    parser.add_argument("group", type=int, help="Space group number")
-    parser.add_argument("--relation", choices=["supergroup", "subgroup", None],
-                        default=None, help="Relation type.")
-    parser.add_argument("--index", type=int, default=None,
-                        help="Max index to display.")
-    parser.add_argument("--orders", type=Path, default=DEFAULT_ORDER_PATH,
-                        help="Path to sg_to_order.json.")
-    parser.add_argument("--supergroups", type=Path, default=DEFAULT_SUPER_PATH,
-                        help="Path to supergroup.json.")
-    parser.add_argument("--subgroups", type=Path, default=DEFAULT_SUB_PATH,
-                        help="Path to subgroup.json.")
-    parser.add_argument("--out", type=Path,
-                        help="Optional output path for the figure (PNG recommended).")
-    parser.add_argument("--show", action="store_true",
-                        help="Show the figure even when saving.")
-    parser.add_argument("--no-edge-labels", action="store_false", dest="edge_labels",
-                        help="Disable drawing index labels on edges.")
-    parser.set_defaults(edge_labels=True)
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    relations = GroupRelations.from_files(args.orders, args.supergroups, args.subgroups)
-    visualizer = GraphVisualizer(relations)
-    visualizer.draw(
-        root=args.group,
-        relation_type=args.relation,
-        index=args.index,
-        out_path=args.out,
-        show=args.show,
-        show_edge_labels=args.edge_labels,
-    )
-    return 0
-
-
 if __name__ == "__main__":
+    API_KEY = "TY4CfoGAcNxKcd0Di0AiErwrrLZVVhsz"
+
+    load_entries("CaTiO3", API_KEY)
     # raise SystemExit(main())
-    relations = GroupRelations.from_files()
-    visualizer = GraphVisualizer(relations)
-    visualizer.draw(
-        root=62,
-        relation_type="subgroup",
-        index=None,
-        out_path=None,
-        show=True,
-        show_edge_labels=True,
-    )
+    # relations = GroupRelations.from_files()
+    # visualizer = GraphVisualizer(relations)
+    # visualizer.draw(
+    #     root=62,
+    #     relation_type="subgroup",
+    #     index=None,
+    #     out_path=None,
+    #     show=True,
+    #     show_edge_labels=True,
+    # )
