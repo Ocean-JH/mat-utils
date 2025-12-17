@@ -201,11 +201,11 @@ class GroupRelations:
                 continue
             cred_idx = [
                 idx for idx in indices
-                if credible_index is None or idx < credible_index
+                if credible_index is None or idx <= credible_index
             ]
             vis_idx = [
                 idx for idx in indices
-                if visible_index is None or idx < visible_index
+                if visible_index is None or idx <= visible_index
             ]
             if not cred_idx and not vis_idx:
                 continue
@@ -395,7 +395,7 @@ class GraphVisualizer:
             "edge_label_font_size": max(6, int(font_size * 0.9)),
             "order_font_size": max(6, int(font_size * 0.9)),
             "arrow_size": max(8, int(12 * (0.7 + 0.6 * node_scale))),
-            "credible_edge_width": edge_width + 0.5,
+            "credible_edge_width": edge_width + 2.0,
             "edge_width": edge_width,
             "spacing_scale": spacing_scale,
             "fig_scale": fig_scale,
