@@ -610,7 +610,7 @@ if __name__ == "__main__":
         formula,
         api_key=API_KEY,
         relation_type="subgroup",
-        index=(2, None),
+        index=(2, None),            # credible index, visible index
         output_dir=None,
         show=True
     )
