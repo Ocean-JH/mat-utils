@@ -192,7 +192,7 @@ class GroupRelations:
             raise ValueError(f"Relation type must be 'supergroup' or 'subgroup', got: {relation_type}")
 
         if index_bounds is None:
-            credible_index, visible_index = 2, None
+            credible_index, visible_index = 3, None
         else:
             credible_index, visible_index = index_bounds
         results: List[Tuple[str, List[int], List[int]]] = []
@@ -610,7 +610,8 @@ if __name__ == "__main__":
         formula,
         api_key=API_KEY,
         relation_type="subgroup",
-        index=(2, None),            # credible index, visible index
+        index=(3, None),            # credible index, visible index
         output_dir=None,
-        show=True
+        show=True,
+        node_filter=True
     )
