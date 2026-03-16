@@ -92,15 +92,15 @@ def apply_pyxtal_op(points: np.ndarray, op) -> np.ndarray:
 def visualize_wyckoffs_plotly(
     space_group_number: int,
     plot_asu: bool = True,
-    exact_asu: bool = False,
     plot_wyckoffs: bool = True,
     orbit_wyckoffs: bool = True,
-    plot_unit_cell: bool = True,
+    plot_lattice: bool = True,
     theme: str = "light",
     camera: Optional[Dict[str, Any]] = None,
     html_out: Optional[bool] = False,
     image_out: Optional[bool] = False,
     image_scale: int = 2,
+    atoms: Optional[List[Dict[str, Any]]] = None,
 ):
     hall_number = get_hall_number(space_group_number)
     sg = Group(hall_number, use_hall=True)
@@ -124,11 +124,11 @@ def visualize_wyckoffs_plotly(
     # Traces accumulator
     traces = []
     category_indices: Dict[str, List[int]] = {
-        "asu": [], "cell": [], "0D": [], "1D": [], "2D": []
+        "asu": [], "cell": [], "0D": [], "1D": [], "2D": [], "atom": [], "atom_label": []
     }
 
-    # ---------- Unit cell edges ----------
-    if plot_unit_cell:
+    # ---------- Lattice ----------
+    if plot_lattice:
         # original sequence of segment endpoint pairs (start, end, start, end, ...)
         raw_points = np.array([
             [0,0,0],[1,0,0],[0,0,0],[0,1,0],[0,0,0],[0,0,1],
@@ -147,8 +147,8 @@ def visualize_wyckoffs_plotly(
         traces.append(go.Scatter3d(
             x=edges[:,0], y=edges[:,1], z=edges[:,2],
             mode="lines",
-            line=dict(color="black", width=4),
-            name="Unit Cell",
+            line=dict(color="#808080", width=4, dash="dash"),
+            name="Lattice",
             hoverinfo="skip",
             showlegend=True
         ))
@@ -365,6 +365,63 @@ def visualize_wyckoffs_plotly(
             ))
             category_indices["asu"].append(len(traces) - 1)
 
+    # ---------- Custom atoms ----------
+    # atoms format:
+    # [
+    #   {"position": [x, y, z], "color": "#ff0000", "radius": 12, "label": "Na"},
+    #   ...
+    # ]
+    if atoms:
+        atom_xyz = []
+        atom_colors = []
+        atom_sizes = []
+        atom_text = []
+        for i, atom in enumerate(atoms):
+            frac = np.array(atom.get("position", [0.0, 0.0, 0.0]), dtype=float).reshape(1, 3)
+            cart = (frac @ basis.T)[0]
+            atom_xyz.append(cart)
+            atom_colors.append(atom.get("color", "#1f77b4"))
+            atom_sizes.append(float(atom.get("radius", 10)))  # marker size in px
+            atom_text.append(atom.get("label", f"Atom {i+1}"))
+
+        atom_xyz = np.array(atom_xyz, dtype=float)
+
+        # atoms without labels
+        traces.append(go.Scatter3d(
+            x=atom_xyz[:, 0], y=atom_xyz[:, 1], z=atom_xyz[:, 2],
+            mode="markers",
+            marker=dict(
+                size=atom_sizes,
+                color=atom_colors,
+                opacity=0.98,
+                symbol="circle",
+                line=dict(color="rgba(20,20,20,0.35)", width=1),
+            ),
+            name="Atoms",
+            hovertemplate="x=%{x:.3f} y=%{y:.3f} z=%{z:.3f}<extra></extra>",
+            showlegend=True
+        ))
+        category_indices["atom"].append(len(traces) - 1)
+
+        # atoms with labels
+        traces.append(go.Scatter3d(
+            x=atom_xyz[:, 0], y=atom_xyz[:, 1], z=atom_xyz[:, 2],
+            mode="markers+text",
+            text=atom_text,
+            textposition="top center",
+            marker=dict(
+                size=atom_sizes,
+                color=atom_colors,
+                opacity=0.98,
+                symbol="circle",
+                line=dict(color="rgba(20,20,20,0.35)", width=1),
+            ),
+            name="Atoms (labels)",
+            hovertemplate="Atom: %{text}<br>x=%{x:.3f} y=%{y:.3f} z=%{z:.3f}<extra></extra>",
+            showlegend=True
+        ))
+        category_indices["atom_label"].append(len(traces) - 1)
+
     # ---------- Build visibility toggles ----------
     def make_visibility_mask(active_keys: List[str]) -> List[bool]:
         vis = [False] * len(traces)
@@ -376,19 +433,22 @@ def visualize_wyckoffs_plotly(
     buttons = [
         dict(label="Show All",
              method="update",
-             args=[{"visible": make_visibility_mask(["asu","cell","0D","1D","2D"])}]),
+             args=[{"visible": make_visibility_mask(["asu","cell","0D","1D","2D","atom"])}]),
         dict(label="ASU View",
              method="update",
              args=[{"visible": make_visibility_mask(["asu","cell","0D","1D"])}]),
-        dict(label="ASU + Unit Cell",
+        dict(label="ASU + Lattice",
              method="update",
              args=[{"visible": make_visibility_mask(["asu","cell"])}]),
+        dict(label="ASU + Lattice + Atoms",
+             method="update",
+             args=[{"visible": make_visibility_mask(["asu","cell","atom"])}]),
+        dict(label="ASU + Lattice + Atoms + Labels",
+             method="update",
+             args=[{"visible": make_visibility_mask(["asu","cell","atom_label"])}]),
         dict(label="ASU only",
              method="update",
              args=[{"visible": make_visibility_mask(["asu"])}]),
-        dict(label="Unit Cell only",
-             method="update",
-             args=[{"visible": make_visibility_mask(["cell"])}]),
         dict(label="0D",
              method="update",
              args=[{"visible": make_visibility_mask(["0D", "cell"])}]),
@@ -403,10 +463,11 @@ def visualize_wyckoffs_plotly(
              args=[{"visible": make_visibility_mask([])}]),
     ]
 
-    # Initial visibility: show all requested
-    initial_visible = make_visibility_mask(
-        [k for k in ["asu","cell","0D","1D"] if category_indices[k]]
-    )
+    # Initial visibility
+    default_keys = [k for k in ["asu","cell","0D","1D"] if category_indices[k]]
+    if category_indices["atom"]:
+        default_keys.append("atom")
+    initial_visible = make_visibility_mask(default_keys)
     for i, v in enumerate(initial_visible):
         traces[i].visible = v
 
@@ -472,14 +533,17 @@ if __name__ == "__main__":
     visualize_wyckoffs_plotly(
         space_group_number=225,
         plot_asu=True,
-        exact_asu=True,
         plot_wyckoffs=True,
         orbit_wyckoffs=True,
-        plot_unit_cell=True,
+        plot_lattice=True,
         theme="light",          # or "dark"
         camera=dict(eye=dict(x=1.8, y=1.2, z=1.3)),
         html_out=True,
         image_out=False,
+        atoms=[
+            {"position": [0.0, 0.0, 0.0], "color": "#f9dd3c", "radius": 35, "label": "Na"},
+            {"position": [0.5, 0.0, 0.0], "color": "#30fc02", "radius": 30, "label": "Cl"},
+        ],
     )
 
     # TODO: Fix ASU shape for some space groups.
