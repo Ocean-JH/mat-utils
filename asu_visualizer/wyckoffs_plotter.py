@@ -43,24 +43,6 @@ def generate_muted_rainbow_colors(num_colors: int, saturation=0.55, value=0.8) -
     return cols
 
 
-def vary_rgb_brightness(rgb_str: str, factor: float) -> str:
-    """Scale the brightness of an ``rgb(r,g,b)`` colour string by *factor*."""
-    s = rgb_str.strip().lower()
-    if not (s.startswith("rgb(") and s.endswith(")")):
-        return rgb_str
-    vals = s[4:-1].split(",")
-    if len(vals) != 3:
-        return rgb_str
-    try:
-        r, g, b = [int(v.strip()) for v in vals]
-    except ValueError:
-        return rgb_str
-    r = max(0, min(255, int(round(r * factor))))
-    g = max(0, min(255, int(round(g * factor))))
-    b = max(0, min(255, int(round(b * factor))))
-    return f"rgb({r},{g},{b})"
-
-
 def get_hall_number(space_group_number) -> int:
     """
     Convert space group number to Hall number.
@@ -176,6 +158,7 @@ def visualize_wyckoffs_plotly(
         # Palettes
         colors_0d = generate_monochromatic_palette(len(wyckoffs["0D"]), base_hue=0.08)
         colors_1d = generate_monochromatic_palette(len(wyckoffs["1D"]), base_hue=0.55)
+        colors_2d = generate_muted_rainbow_colors(len(wyckoffs["2D"]), saturation=0.5, value=0.85)
 
         # 0D
         for idx, (label, pt) in enumerate(wyckoffs["0D"].items()):
@@ -235,65 +218,46 @@ def visualize_wyckoffs_plotly(
                 ))
                 category_indices["1D"].append(len(traces) - 1)
 
-        # 2D – one Mesh3d trace per polygon so each face can have a distinct colour
-        base_colors_2d = generate_muted_rainbow_colors(len(wyckoffs["2D"]), saturation=0.5, value=0.85)
-        # Brightness cycling: shades range from MIN_BRIGHTNESS to
-        # MIN_BRIGHTNESS + BRIGHTNESS_RANGE, cycling every BRIGHTNESS_CYCLE_STEPS
-        # polygons so faces within the same label remain in the same hue family
-        # while still being visually separable.
-        MIN_BRIGHTNESS = 0.78
-        BRIGHTNESS_RANGE = 0.34
-        BRIGHTNESS_CYCLE_STEPS = 7
-
+        # 2D
         for idx, (label, facets) in enumerate(wyckoffs["2D"].items()):
-            base_color = base_colors_2d[idx]
-            poly_counter = 0  # counts rendered polygons for this label
-
+            face_pts = []
+            tri_i = []
+            tri_j = []
+            tri_k = []
+            offset = 0
             for facet in facets:
                 for poly in facet:
                     poly_arr = frac_array(poly).astype(float)  # (m,3)
-                    candidates = []
-
                     if orbit_wyckoffs:
                         for op in general_ops:
                             transformed = apply_pyxtal_op(poly_arr, op)
                             for t in translations:
                                 cand = transformed + t
                                 if np.all(inside_unit_cell(cand)):
-                                    candidates.append(cand @ basis.T)
+                                    face_pts.append(cand @ basis.T)
+                                    for tix in range(1, cand.shape[0]-1):
+                                        tri_i.append(offset)
+                                        tri_j.append(offset + tix)
+                                        tri_k.append(offset + tix + 1)
+                                    offset += cand.shape[0]
                     else:
-                        candidates.append(poly_arr @ basis.T)
-
-                    for cand_cart in candidates:
-                        if cand_cart.shape[0] < 3:
-                            continue
-
-                        n = cand_cart.shape[0]
-                        tri_i, tri_j, tri_k = [], [], []
-                        for tix in range(1, n - 1):
-                            tri_i.append(0)
-                            tri_j.append(tix)
-                            tri_k.append(tix + 1)
-
-                        # Vary brightness across polygons within the same label
-                        # so distinct faces are visually separable while sharing the same hue.
-                        shade = MIN_BRIGHTNESS + BRIGHTNESS_RANGE * (
-                            (poly_counter % BRIGHTNESS_CYCLE_STEPS) / (BRIGHTNESS_CYCLE_STEPS - 1)
-                        )
-                        poly_color = vary_rgb_brightness(base_color, shade)
-                        is_first = (poly_counter == 0)
-                        poly_counter += 1
-
-                        traces.append(go.Mesh3d(
-                            x=cand_cart[:, 0], y=cand_cart[:, 1], z=cand_cart[:, 2],
-                            i=tri_i, j=tri_j, k=tri_k,
-                            name=f"2D {label}",
-                            color=poly_color,
-                            opacity=0.55,
-                            flatshading=True,
-                            showlegend=is_first,
-                        ))
-                        category_indices["2D"].append(len(traces) - 1)
+                        face_pts.append(poly_arr @ basis.T)
+                        for tix in range(1, poly_arr.shape[0]-1):
+                            tri_i.append(offset)
+                            tri_j.append(offset + tix)
+                            tri_k.append(offset + tix + 1)
+                        offset += poly_arr.shape[0]
+            if face_pts:
+                all_pts = np.concatenate(face_pts, axis=0)
+                traces.append(go.Mesh3d(
+                    x=all_pts[:,0], y=all_pts[:,1], z=all_pts[:,2],
+                    i=tri_i, j=tri_j, k=tri_k,
+                    name=f"2D {label}",
+                    color=colors_2d[idx],
+                    opacity=0.55,
+                    flatshading=True,
+                ))
+                category_indices["2D"].append(len(traces) - 1)
 
     # ---------- ASU ----------
     if plot_asu:
