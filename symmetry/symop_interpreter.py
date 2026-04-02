@@ -64,12 +64,22 @@ def identify_rot_type(r_mat, tol=TOL):
 
     raise ValueError(f"Unrecognized rotation, det={det:.3f}, trace={trace:.3f}")
 
+def format_sol_as_coords(sol_dict):
+    """Format a sympy solution dict as a numeric 3D point string."""
+    x, y, z = sp.symbols("x y z")
+    coords = []
+    for var in [x, y, z]:
+        expr = sol_dict.get(var, var)
+        if expr.is_Number:
+            coords.append(f"{float(expr):.3f}")
+        else:
+            coords.append(str(expr))
+    return ", ".join(coords)
 
 def solve_inversion_point(rot, trans, tol=TOL):
     """Solve (W - I)x = -w for inversion point x."""
     rot = np.asarray(rot, dtype=float)
     trans = np.asarray(trans, dtype=float)
-    print(rot, trans)
     A = rot - np.eye(3)
     b = -trans
     x, *_ = np.linalg.lstsq(A, b, rcond=None)
@@ -91,7 +101,7 @@ def _solve_linear_fixed_set(W, t):
 def solve_rotoinversion_axis(rot, trans):
     """Solve fixed set of (W^2, Ww + w) for rotoinversion axis."""
     W2, t2 = affine_power(rot, trans, 2)
-    return _solve_linear_fixed_set(W2, t2)
+    return _solve_linear_fixed_set(W2, t2)[0]
 
 
 def solve_screw_axis(rot, trans, n):
@@ -99,7 +109,8 @@ def solve_screw_axis(rot, trans, n):
     _, t_n = affine_power(rot, trans, n)
     w_g = sp.Matrix(t_n) / n
     w_l = sp.Matrix(trans) - w_g
-    sol = _solve_linear_fixed_set(rot, w_l)
+    # Round w_l to mitigate numerical issues before symbolic solve
+    sol = _solve_linear_fixed_set(rot, w_l.applyfunc(lambda x: round(float(x), 15)))[0]
     return w_g, sol
 
 
@@ -166,31 +177,26 @@ def get_points_on_axis(sol_dict):
 
     param = list(free_syms)[0]
 
+    # points = []
+    # for i in range(3):
+    #     expr = exprs[i]
+    #     try:
+    #         sol = sp.solve(expr, param)
+    #         if sol:
+    #             t_val = sol[0]
+    #             subs = {param: t_val}
+    #             pt = [float(e.subs(subs)) for e in exprs]
+    #             points.append(np.array(pt))
+    #     except:
+    #         continue
+
     points = []
+    for val in [0, 1]:
+        subs = {param: val}
+        pt = [float(e.subs(subs)) for e in exprs]
+        points.append(np.array(pt))
 
-    for i in range(3):
-        expr = exprs[i]
-        try:
-            sol = sp.solve(expr, param)
-            if sol:
-                t_val = sol[0]
-                subs = {param: t_val}
-                pt = [float(e.subs(subs)) for e in exprs]
-                points.append(np.array(pt))
-        except:
-            continue
-
-    if len(points) < 2:
-        points = []
-        for val in [0, 1]:
-            subs = {param: val}
-            pt = [float(e.subs(subs)) for e in exprs]
-            points.append(np.array(pt))
-
-    if len(points) >= 2:
-        return points[0], points[1]
-    else:
-        raise RuntimeError("No valid points found")
+    return points[0], points[1]
 
 
 def _operation_sign_from_det(det_val, is_rotoinversion, tol=TOL):
@@ -202,7 +208,7 @@ def _operation_sign_from_det(det_val, is_rotoinversion, tol=TOL):
     return "+" if det_val < 0 else "-"
 
 
-def calculate_operation_sense(affine_mat, tol=TOL):
+def get_operation_sense(rot, trans, tol=TOL):
     """
     Compute sense (+/-) for pure/screw rotation or rotoinversion using determinant rule.
 
@@ -213,9 +219,7 @@ def calculate_operation_sense(affine_mat, tol=TOL):
             - sense: '+', '-', or '0' (degenerate)
             - points: {'P0','P1','P2','P3'} for debugging/inspection
     """
-    rot, trans = _parse_affine(affine_mat)
-    det = det = np.linalg.det(np.array(rot))
-    rot_type = identify_rot_type(rot, tol=tol)
+    det = np.linalg.det(np.array(rot))
     n = rotation_order(rot, tol=tol)
     if n <= 0:
         raise ValueError("Cannot determine operation order for sense calculation.")
@@ -229,11 +233,9 @@ def calculate_operation_sense(affine_mat, tol=TOL):
         raise ValueError("No axis solution found for sense calculation.")
 
     # Pick first symbolic axis solution, evaluate two points with different parameter values
-    sol0 = axis_sol[0]
-    P0, P1 = get_points_on_axis(sol0)
+    P0, P1 = get_points_on_axis(axis_sol)
     if np.linalg.norm(P1 - P0) < tol:
         raise ValueError("Failed to construct two distinct axis points P0/P1.")
-    print(P0,P1)
     # Choose a point not on axis
     axis_dir = P1 - P0
     axis_dir = axis_dir / np.linalg.norm(axis_dir)
@@ -260,7 +262,7 @@ def calculate_operation_sense(affine_mat, tol=TOL):
     v3 = P3 - P0
     d = float(np.linalg.det(np.column_stack([v1, v2, v3])))
 
-    is_rotoinv = np.linalg.det(rot) < 0 and rot_type not in ("m", "-1")
+    is_rotoinv = np.linalg.det(rot) < 0
     sense = _operation_sign_from_det(d, is_rotoinv, tol=tol)
 
     return sense
@@ -271,7 +273,7 @@ def identify_symmetry_operation(mat, tol=TOL):
     Returns concise text summary.
     """
     rot, trans = _parse_affine(mat)
-    rot_op = identify_rot_type(rot, tol=tol)
+    rot_type = identify_rot_type(rot, tol=tol)
 
     det = np.linalg.det(rot)
     trace = np.trace(rot)
@@ -282,21 +284,32 @@ def identify_symmetry_operation(mat, tol=TOL):
     rotoinversion_axis = ""
     screw_axis = ""
     inversion_point = ''
+    rot_sense = ''
 
     if is_close(det, -1.0, tol):
         if is_close(trace, 1.0, tol):  # mirror/glide family
             w_g, glide_plane = solve_screw_axis(rot, trans, n)
+            glide_plane = format_sol_as_coords(glide_plane)
         elif is_close(trace, -3.0, tol):  # rotoinversion family
             inversion_point = solve_inversion_point(rot, trans, tol=tol)
         else:
             inversion_point = solve_inversion_point(rot, trans, tol=tol)
             rotoinversion_axis = solve_rotoinversion_axis(rot, trans)
-    elif is_close(det, 1.0, tol):
+            rotoinversion_axis = format_sol_as_coords(rotoinversion_axis)
+    elif is_close(det, 1.0, tol) and rot_type != "1":
         w_g, screw_axis = solve_screw_axis(rot, trans, n)
+        screw_axis = format_sol_as_coords(screw_axis)
+
+    elif rot_type == '1':
+        pass
+
     else:
         raise ValueError("Unrecognized affine operation.")
 
-    return f"{rot_op}\n{w_g} {glide_plane}{rotoinversion_axis}{screw_axis} {inversion_point}"
+    if rot_type not in ("1", "m", "-1", "2"):
+        rot_sense = get_operation_sense(rot, trans, tol=tol)
+
+    return f"{rot_type}{rot_sense} {list(w_g)} {glide_plane}{rotoinversion_axis}{screw_axis}   {inversion_point}"
 
 
 ########################################################################################################################
@@ -486,6 +499,8 @@ def identify_rotation(r_mat, tol=TOL):
 
 
 if __name__ == '__main__':
+    from pymatgen.symmetry.groups import PointGroup, SpaceGroup
+
     point_groups = [
         "1", "-1", "2", "m", "2/m",
         "222", "mm2", "mmm",
@@ -495,7 +510,6 @@ if __name__ == '__main__':
         "23", "m-3", "432", "-43m", "m-3m"
     ]
 
-    from pymatgen.symmetry.groups import PointGroup, SpaceGroup
 
     for pg in point_groups:
         pg_ops = PointGroup(pg)
@@ -510,7 +524,3 @@ if __name__ == '__main__':
         for op in sg.symmetry_ops:
             result = identify_symmetry_operation(op.affine_matrix)
             print(f"Affine matrix:\n{op.affine_matrix}\n Identification:\n{result}\n")
-
-    mat = [[0, 0, 1, 0], [0, -1, 0, 0.5], [-1, 0, 0, 0.5]]
-    print(calculate_operation_sense(mat))
-    print(identify_symmetry_operation(mat))
