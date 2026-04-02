@@ -84,12 +84,58 @@ def rot_direction(matrix, axis, tol=1e-6):
     triple = np.dot(axis, np.cross(v_proj, v_rot))
     return "⁺" if triple < 0 else "⁻"
 
+def identify_rot_type(r_mat, tol=1e-6):
+    """
+    Identify a 3×3 matrix as a point group operation.
+    Source: ITC-Vol.A-2005, Table 11.2.1.1, p. 812
+
+    Parameters:
+        r_mat (array-like): A 3x3 rotation-like matrix from symmetry operation.
+        tol (float): Numerical tolerance for equality checks.
+    Returns:
+        str: '1', '-1', 'm', etc.
+    """
+    matrix = np.array(r_mat, dtype=float)
+    det = np.linalg.det(matrix)
+    trace = np.trace(matrix)
+
+    if np.isclose(det, 1.0, atol=tol):
+        if np.isclose(trace, -1.0, atol=tol):
+            return "2"
+        elif np.isclose(trace, 0.0, atol=tol):
+            return "3"
+        elif np.isclose(trace, 1.0, atol=tol):
+            return "4"
+        elif np.isclose(trace, 2.0, atol=tol):
+            return "6"
+        elif np.isclose(trace, 3.0, atol=tol):
+            return "1"
+        else:
+            raise ValueError("Unrecognized rotation, det=1, trace={trace:.3f}")
+
+    elif np.isclose(det, -1.0, atol=tol):
+        if np.isclose(trace, -3.0, atol=tol):
+            return "-1"
+        elif np.isclose(trace, -2.0, atol=tol):
+            return "-6"
+        elif np.isclose(trace, -1.0, atol=tol):
+            return "-4"
+        elif np.isclose(trace, 0.0, atol=tol):
+            return "-3"
+        elif np.isclose(trace, 1.0, atol=tol):
+            return "m"
+        else:
+            raise ValueError(f"Unrecognized rotation, det=-1, trace={trace:.3f}")
+
+    else:
+        raise ValueError(f"Unrecognized rotation, det={det:.3f}, trace={trace:.3f}")
+
 def identify_rotation(r_mat, tol=1e-6):
     """
     Identify a 3×3 matrix as a point group operation.
 
     Parameters:
-        r_mat (array-like): A 3x3 rotation-like matrix (e.g., from symmetry operation).
+        r_mat (array-like): A 3x3 rotation-like matrix from symmetry operation.
         tol (float): Numerical tolerance for equality checks.
 
     Returns:
@@ -212,8 +258,8 @@ def identify_affine_operation(affine_mat, tol=1e-6):
     else:
         raise ValueError("Affine matrix must be 3x4 or 4x4 shape.")
 
-    # Classify rotation (linear) part
-    result = classify_rotation(rot, tol=tol)
+    # Classify rotation part
+    result = identify_rotation(rot, tol=tol)
     # result["translation"] = np.round(trans, 6)
 
     # Heuristic screw/glide detector
